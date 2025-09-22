@@ -218,8 +218,36 @@ def encode_image(pil_image):
 dtype = torch.bfloat16
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+# Scheduler configuration for Lightning
+scheduler_config = {
+    "base_image_seq_len": 256,
+    "base_shift": math.log(3),
+    "invert_sigmas": False,
+    "max_image_seq_len": 8192,
+    "max_shift": math.log(3),
+    "num_train_timesteps": 1000,
+    "shift": 1.0,
+    "shift_terminal": None,
+    "stochastic_sampling": False,
+    "time_shift_type": "exponential",
+    "use_beta_sigmas": False,
+    "use_dynamic_shifting": True,
+    "use_exponential_sigmas": False,
+    "use_karras_sigmas": False,
+}
+
+# Initialize scheduler with Lightning config
+scheduler = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
+
 # Load the model pipeline
-pipe = QwenImageEditPlusPipeline.from_pretrained("Qwen/Qwen-Image-Edit-2509", torch_dtype=dtype).to(device)
+pipe = QwenImageEditPlusPipeline.from_pretrained("Qwen/Qwen-Image-Edit-2509", 
+                                                 scheduler=scheduler,
+                                                 torch_dtype=dtype).to(device)
+pipe.load_lora_weights(
+        "lightx2v/Qwen-Image-Lightning", 
+        weight_name="Qwen-Image-Lightning-8steps-V2.0-bf16.safetensors"
+    )
+pipe.fuse_lora()
 
 # --- UI Constants and Helpers ---
 MAX_SEED = np.iinfo(np.int32).max
@@ -307,7 +335,10 @@ with gr.Blocks(css=css) as demo:
         gr.Markdown("[Learn more](https://github.com/QwenLM/Qwen-Image) about the Qwen-Image series. Try on [Qwen Chat](https://chat.qwen.ai/), or [download model](https://huggingface.co/Qwen/Qwen-Image-Edit) to run locally with ComfyUI or diffusers.")
         with gr.Row():
             with gr.Column():
-                input_images = gr.Gallery(label="Input Images", show_label=False, type="pil", interactive=True)
+                input_images = gr.Gallery(label="Input Images", 
+                                          show_label=False, 
+                                          type="pil", 
+                                          interactive=True)
 
             # result = gr.Image(label="Result", show_label=False, type="pil")
             result = gr.Gallery(label="Result", show_label=False, type="pil")
@@ -340,15 +371,15 @@ with gr.Blocks(css=css) as demo:
                     minimum=1.0,
                     maximum=10.0,
                     step=0.1,
-                    value=4.0
+                    value=1.0
                 )
 
                 num_inference_steps = gr.Slider(
                     label="Number of inference steps",
                     minimum=1,
-                    maximum=50,
+                    maximum=40,
                     step=1,
-                    value=40,
+                    value=8,
                 )
                 
                 height = gr.Slider(
