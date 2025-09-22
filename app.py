@@ -90,29 +90,91 @@ Please strictly follow the rewriting rules below:
    "Rewritten": "..."
 }
 '''
-
-def polish_prompt(prompt, img):
+# --- Prompt Enhancement using Hugging Face InferenceClient ---
+def polish_prompt_hf(prompt, img):
+    """
+    Rewrites the prompt using a Hugging Face InferenceClient.
+    """
+    # Ensure HF_TOKEN is set
+    api_key = os.environ.get("HF_TOKEN")
     prompt = f"{SYSTEM_PROMPT}\n\nUser Input: {prompt}\n\nRewritten Prompt:"
-    success=False
-    while not success:
-        try:
-            result = api(prompt, [img])
-            # print(f"Result: {result}")
-            # print(f"Polished Prompt: {polished_prompt}")
-            if isinstance(result, str):
-                result = result.replace('```json','')
-                result = result.replace('```','')
-                result = json.loads(result)
-            else:
-                result = json.loads(result)
+    if not api_key:
+        print("Warning: HF_TOKEN not set. Falling back to original prompt.")
+        return original_prompt
 
-            polished_prompt = result['Rewritten']
-            polished_prompt = polished_prompt.strip()
-            polished_prompt = polished_prompt.replace("\n", " ")
-            success = True
-        except Exception as e:
-            print(f"[Warning] Error during API call: {e}")
-    return polished_prompt
+    try:
+        # Initialize the client
+        client = InferenceClient(
+            provider="cerebras",
+            api_key=api_key,
+        )
+
+        # Format the messages for the chat completions API
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ]
+
+        sys_promot = "you are a helpful assistant, you should provide useful answers to users."
+        messages = [
+            {"role": "system", "content": sys_promot},
+            {"role": "user", "content": []}]
+        for img in img_list:
+            messages[1]["content"].append(
+                {"image": f"data:image/png;base64,{encode_image(img)}"})
+        messages[1]["content"].append({"text": f"{prompt}"})
+
+        # Call the API
+        completion = client.chat.completions.create(
+            model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+            messages=messages,
+        )
+        
+        # Parse the response
+        result = completion.choices[0].message.content
+        
+        # Try to extract JSON if present
+        if '{"Rewritten"' in result:
+            try:
+                # Clean up the response
+                result = result.replace('```json', '').replace('```', '')
+                result_json = json.loads(result)
+                polished_prompt = result_json.get('Rewritten', result)
+            except:
+                polished_prompt = result
+        else:
+            polished_prompt = result
+            
+        polished_prompt = polished_prompt.strip().replace("\n", " ")
+        return polished_prompt
+        
+    except Exception as e:
+        print(f"Error during API call to Hugging Face: {e}")
+        # Fallback to original prompt if enhancement fails
+        return original_prompt
+        
+# def polish_prompt(prompt, img):
+#     prompt = f"{SYSTEM_PROMPT}\n\nUser Input: {prompt}\n\nRewritten Prompt:"
+#     success=False
+#     while not success:
+#         try:
+#             result = api(prompt, [img])
+#             # print(f"Result: {result}")
+#             # print(f"Polished Prompt: {polished_prompt}")
+#             if isinstance(result, str):
+#                 result = result.replace('```json','')
+#                 result = result.replace('```','')
+#                 result = json.loads(result)
+#             else:
+#                 result = json.loads(result)
+
+#             polished_prompt = result['Rewritten']
+#             polished_prompt = polished_prompt.strip()
+#             polished_prompt = polished_prompt.replace("\n", " ")
+#             success = True
+#         except Exception as e:
+#             print(f"[Warning] Error during API call: {e}")
+#     return polished_prompt
 
 
 def encode_image(pil_image):
@@ -122,37 +184,35 @@ def encode_image(pil_image):
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
+# def api(prompt, img_list, model="qwen-vl-max-latest", kwargs={}):
+#     import dashscope
+#     api_key = os.environ.get('DASH_API_KEY')
+#     if not api_key:
+#         raise EnvironmentError("DASH_API_KEY is not set")
+#     assert model in ["qwen-vl-max-latest"], f"Not implemented model {model}"
+#     sys_promot = "you are a helpful assistant, you should provide useful answers to users."
+#     messages = [
+#         {"role": "system", "content": sys_promot},
+#         {"role": "user", "content": []}]
+#     for img in img_list:
+#         messages[1]["content"].append(
+#             {"image": f"data:image/png;base64,{encode_image(img)}"})
+#     messages[1]["content"].append({"text": f"{prompt}"})
 
+#     response_format = kwargs.get('response_format', None)
 
-def api(prompt, img_list, model="qwen-vl-max-latest", kwargs={}):
-    import dashscope
-    api_key = os.environ.get('DASH_API_KEY')
-    if not api_key:
-        raise EnvironmentError("DASH_API_KEY is not set")
-    assert model in ["qwen-vl-max-latest"], f"Not implemented model {model}"
-    sys_promot = "you are a helpful assistant, you should provide useful answers to users."
-    messages = [
-        {"role": "system", "content": sys_promot},
-        {"role": "user", "content": []}]
-    for img in img_list:
-        messages[1]["content"].append(
-            {"image": f"data:image/png;base64,{encode_image(img)}"})
-    messages[1]["content"].append({"text": f"{prompt}"})
+#     response = dashscope.MultiModalConversation.call(
+#         api_key=api_key,
+#         model=model, # For example, use qwen-plus here. You can change the model name as needed. Model list: https://help.aliyun.com/zh/model-studio/getting-started/models
+#         messages=messages,
+#         result_format='message',
+#         response_format=response_format,
+#         )
 
-    response_format = kwargs.get('response_format', None)
-
-    response = dashscope.MultiModalConversation.call(
-        api_key=api_key,
-        model=model, # For example, use qwen-plus here. You can change the model name as needed. Model list: https://help.aliyun.com/zh/model-studio/getting-started/models
-        messages=messages,
-        result_format='message',
-        response_format=response_format,
-        )
-
-    if response.status_code == 200:
-        return response.output.choices[0].message.content[0]['text']
-    else:
-        raise Exception(f'Failed to post: {response}')
+#     if response.status_code == 200:
+#         return response.output.choices[0].message.content[0]['text']
+#     else:
+#         raise Exception(f'Failed to post: {response}')
 
 # --- Model Loading ---
 dtype = torch.bfloat16
@@ -172,7 +232,7 @@ def infer(
     seed=42,
     randomize_seed=False,
     true_guidance_scale=1.0,
-    num_inference_steps=50,
+    num_inference_steps=8,
     height=None,
     width=None,
     rewrite_prompt=True,
@@ -211,7 +271,7 @@ def infer(
     print(f"Negative Prompt: '{negative_prompt}'")
     print(f"Seed: {seed}, Steps: {num_inference_steps}, Guidance: {true_guidance_scale}, Size: {width}x{height}")
     if rewrite_prompt and len(pil_images) > 0:
-        prompt = polish_prompt(prompt, pil_images[0])
+        prompt = polish_prompt_hf(prompt, pil_images)
         print(f"Rewritten Prompt: {prompt}")
     
 
