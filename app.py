@@ -307,13 +307,6 @@ with gr.Blocks(css=css) as demo:
                     value=None,
                 )
                 
-                num_images_per_prompt = gr.Slider(
-                    label="Number of images per prompt",
-                    minimum=1,
-                    maximum=4,
-                    step=1,
-                    value=1,
-                )
                 
                 rewrite_prompt = gr.Checkbox(label="Rewrite prompt", value=False)
 
@@ -332,7 +325,6 @@ with gr.Blocks(css=css) as demo:
             height,
             width,
             rewrite_prompt,
-            num_images_per_prompt,
         ],
         outputs=[result, seed],
     )
