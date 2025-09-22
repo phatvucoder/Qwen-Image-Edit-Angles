@@ -6,6 +6,7 @@ import spaces
 
 from PIL import Image
 from diffusers import QwenImageEditPlusPipeline
+import math
 
 import os
 import base64
