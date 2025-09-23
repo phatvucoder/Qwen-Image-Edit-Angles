@@ -53,9 +53,9 @@ Please strictly follow the rewriting rules below:
 ### 3. Human Editing Tasks
 - Make the smallest changes to the given user's prompt.  
 - If changes to background, action, expression, camera shot, or ambient lighting are required, please list each modification individually.
-- **Edits to makeup or facial features / expression must be subtle, not exaggerated, and must preserve the subject’s identity consistency.**
+- **Edits to makeup or facial features / expression must be subtle, not exaggerated, and must preserve the subject's identity consistency.**
     > Original: "Add eyebrows to the face"  
-    > Rewritten: "Slightly thicken the person’s eyebrows with little change, look natural."
+    > Rewritten: "Slightly thicken the person's eyebrows with little change, look natural."
 
 ### 4. Style Conversion or Enhancement Tasks
 - If a style is specified, describe it concisely using key visual features. For example:  
@@ -82,13 +82,13 @@ Please strictly follow the rewriting rules below:
    > Rewritten: "Migrate the logo in the image to a new scene, preserving similar shape and structure"
 
 ### 7. Multi-Image Tasks
-- Rewritten prompts must clearly point out which image’s element is being modified. For example:  
+- Rewritten prompts must clearly point out which image's element is being modified. For example:  
     > Original: "Replace the subject of picture 1 with the subject of picture 2"  
-    > Rewritten: "Replace the girl of picture 1 with the boy of picture 2, keeping picture 2’s background unchanged"  
-- For stylization tasks, describe the reference image’s style in the rewritten prompt, while preserving the visual content of the source image.  
+    > Rewritten: "Replace the girl of picture 1 with the boy of picture 2, keeping picture 2's background unchanged"  
+- For stylization tasks, describe the reference image's style in the rewritten prompt, while preserving the visual content of the source image.  
 
 ## 3. Rationale and Logic Check
-- Resolve contradictory instructions: e.g., “Remove all trees but keep all trees” requires logical correction.
+- Resolve contradictory instructions: e.g., "Remove all trees but keep all trees" requires logical correction.
 - Supplement missing critical information: e.g., if position is unspecified, choose a reasonable area based on composition (near subject, blank space, center/edge, etc.).
 
 # Output Format Example
@@ -208,6 +208,12 @@ optimize_pipeline_(pipe, image=[Image.new("RGB", (1024, 1024)), Image.new("RGB",
 # --- UI Constants and Helpers ---
 MAX_SEED = np.iinfo(np.int32).max
 
+def use_output_as_input(output_images):
+    """Convert output images to input format for the gallery"""
+    if output_images is None or len(output_images) == 0:
+        return []
+    return output_images
+
 # --- Main Inference Function (with hardcoded negative prompt) ---
 @spaces.GPU(duration=300)
 def infer(
@@ -272,7 +278,8 @@ def infer(
         num_images_per_prompt=num_images_per_prompt,
     ).images
 
-    return image, seed
+    # Return images, seed, and make button visible
+    return image, seed, gr.update(visible=True)
 
 # --- Examples and UI Layout ---
 examples = []
@@ -311,8 +318,11 @@ with gr.Blocks(css=css) as demo:
                                           type="pil", 
                                           interactive=True)
 
-            # result = gr.Image(label="Result", show_label=False, type="pil")
-            result = gr.Gallery(label="Result", show_label=False, type="pil")
+            with gr.Column():
+                result = gr.Gallery(label="Result", show_label=False, type="pil")
+                # Add this button right after the result gallery - initially hidden
+                use_output_btn = gr.Button("↗️ Use as input", variant="secondary", size="sm", visible=False)
+
         with gr.Row():
             prompt = gr.Text(
                     label="Prompt",
@@ -388,7 +398,14 @@ with gr.Blocks(css=css) as demo:
             width,
             rewrite_prompt,
         ],
-        outputs=[result, seed],
+        outputs=[result, seed, use_output_btn],  # Added use_output_btn to outputs
+    )
+
+    # Add the new event handler for the "Use Output as Input" button
+    use_output_btn.click(
+        fn=use_output_as_input,
+        inputs=[result],
+        outputs=[input_images]
     )
 
 if __name__ == "__main__":
