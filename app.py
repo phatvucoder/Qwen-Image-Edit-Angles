@@ -243,18 +243,20 @@ def encode_image(pil_image):
 dtype = torch.bfloat16
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-pipe = QwenImageEditPlusPipeline.from_pretrained("Qwen/Qwen-Image-Edit-2509", 
-                                                 # scheduler=scheduler,
+transformer = QwenImageTransformer2DModel.from_pretrained("linoyts/Qwen-Image-Edit-Rapid-AIO", 
+                                                          subfolder="transformer",torch_dtype=dtype)
+pipe = QwenImageEditPlusPipeline.from_pretrained("Qwen/Qwen-Image-Edit-2509",
+                                                 transformer=transformer,
                                                  torch_dtype=dtype).to(device)
-weights_path = hf_hub_download(
-    repo_id="linoyts/Qwen-Image-Edit-Rapid-AIO",
-    filename="transformer/transformer_weights.safetensors",
-    repo_type="model"
-)
-state_dict = load_file(weights_path)
+# weights_path = hf_hub_download(
+#     repo_id="linoyts/Qwen-Image-Edit-Rapid-AIO",
+#     filename="transformer/transformer_weights.safetensors",
+#     repo_type="model"
+# )
+# state_dict = load_file(weights_path)
 
-# load next scene LoRA 
-pipe.transformer.load_state_dict(state_dict, strict=False)
+# # load next scene LoRA 
+# pipe.transformer.load_state_dict(state_dict, strict=False)
 pipe.load_lora_weights(
         "lovis93/next-scene-qwen-image-lora-2509", 
         weight_name="next-scene_lora-v2-3000.safetensors", adapter_name="next-scene"
