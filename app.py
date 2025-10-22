@@ -169,36 +169,6 @@ def encode_image(pil_image):
 dtype = torch.bfloat16
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Scheduler configuration for Lightning
-# scheduler_config = {
-#     "base_image_seq_len": 256,
-#     "base_shift": math.log(3),
-#     "invert_sigmas": False,
-#     "max_image_seq_len": 8192,
-#     "max_shift": math.log(3),
-#     "num_train_timesteps": 1000,
-#     "shift": 1.0,
-#     "shift_terminal": None,
-#     "stochastic_sampling": False,
-#     "time_shift_type": "exponential",
-#     "use_beta_sigmas": False,
-#     "use_dynamic_shifting": True,
-#     "use_exponential_sigmas": False,
-#     "use_karras_sigmas": False,
-# }
-
-# # Initialize scheduler with Lightning config
-# scheduler = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
-
-# # Load the model pipeline
-# pipe = QwenImageEditPlusPipeline.from_pretrained("Qwen/Qwen-Image-Edit-2509", 
-#                                                  scheduler=scheduler,
-#                                                  torch_dtype=dtype).to(device)
-# pipe.load_lora_weights(
-#         "lightx2v/Qwen-Image-Lightning", 
-#         weight_name="Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors"
-#     )
-# pipe.fuse_lora()
 pipe = QwenImageEditPlusPipeline.from_pretrained("Qwen/Qwen-Image-Edit-2509", 
                                                  # scheduler=scheduler,
                                                  torch_dtype=dtype).to(device)
@@ -209,7 +179,13 @@ weights_path = hf_hub_download(
 )
 state_dict = load_file(weights_path)
 
+# load next scene LoRA 
 pipe.transformer.load_state_dict(state_dict, strict=False)
+pipe.load_lora_weights(
+        "lovis93/next-scene-qwen-image-lora-2509", 
+        weight_name="next-scene_lora-v2-3000.safetensors"
+    )
+pipe.fuse_lora()
 
 # Apply the same optimizations from the first version
 pipe.transformer.__class__ = QwenImageTransformer2DModel
