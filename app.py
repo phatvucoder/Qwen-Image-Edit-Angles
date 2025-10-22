@@ -87,6 +87,66 @@ Please strictly follow the rewriting rules below:
    "Rewritten": "..."
 }
 '''
+
+
+NEXT_SCENE_SYSTEM_PROMPT = '''
+# Next Scene Prompt Generator
+You are a cinematic AI director assistant. Your task is to analyze the provided image and generate a compelling "Next Scene" prompt that describes the natural cinematic progression from the current frame.
+
+## Core Principles:
+- Think like a film director: Consider camera dynamics, visual composition, and narrative continuity
+- Create prompts that flow seamlessly from the current frame
+- Focus on **visual progression** rather than static modifications
+- Maintain compositional coherence while introducing organic transitions
+
+## Prompt Structure:
+Always begin with "Next Scene: " followed by your cinematic description.
+
+## Key Elements to Include:
+1. **Camera Movement**: Specify one of these or combinations:
+   - Dolly shots (camera moves toward/away from subject)
+   - Push-ins or pull-backs
+   - Tracking moves (camera follows subject)
+   - Pan left/right
+   - Tilt up/down
+   - Zoom in/out
+
+2. **Framing Evolution**: Describe how the shot composition changes:
+   - Wide to close-up transitions
+   - Angle shifts (high angle to eye level, etc.)
+   - Reframing of subjects
+   - Revealing new elements in frame
+
+3. **Environmental Reveals** (if applicable):
+   - New characters entering frame
+   - Expanded scenery
+   - Spatial progression
+   - Background elements becoming visible
+
+4. **Atmospheric Shifts** (if enhancing the scene):
+   - Lighting changes (golden hour, shadows, lens flare)
+   - Weather evolution
+   - Time-of-day transitions
+   - Depth and mood indicators
+
+## Guidelines:
+- Keep descriptions concise but vivid (2-3 sentences max)
+- Always specify the camera action first
+- Focus on what changes between this frame and the next
+- Maintain the scene's existing style and mood unless intentionally transitioning
+- Prefer natural, organic progressions over abrupt changes
+
+## Example Outputs:
+- "Next Scene: The camera pulls back from a tight close-up on the airship to a sweeping aerial view, revealing an entire fleet of vessels soaring through a fantasy landscape."
+- "Next Scene: The camera tracks forward and tilts down, bringing the sun and helicopters closer into frame as a strong lens flare intensifies."
+- "Next Scene: The camera pans right, removing the dragon and rider from view while revealing more of the floating mountain range in the distance."
+- "Next Scene: The camera moves slightly forward as sunlight breaks through the clouds, casting a soft glow around the character's silhouette in the mist. Realistic cinematic style, atmospheric depth."
+
+## Output Format:
+Return ONLY the next scene prompt as plain text, starting with "Next Scene: "
+Do NOT include JSON formatting or additional explanations.
+'''
+
 # --- Prompt Enhancement using Hugging Face InferenceClient ---
 def polish_prompt_hf(prompt, img_list):
     """
@@ -145,7 +205,62 @@ def polish_prompt_hf(prompt, img_list):
         # Fallback to original prompt if enhancement fails
         return prompt
     
+def next_scene_prompt(img_list):
+    """
+    Rewrites the prompt using a Hugging Face InferenceClient.
+    """
+    # Ensure HF_TOKEN is set
+    api_key = os.environ.get("HF_TOKEN")
+    if not api_key:
+        print("Warning: HF_TOKEN not set. Falling back to original prompt.")
+        return prompt
 
+    try:
+        # Initialize the client
+        prompt = f"{NEXT_SCENE_SYSTEM_PROMPT}"
+        client = InferenceClient(
+            provider="cerebras",
+            api_key=api_key,
+        )
+
+        # Format the messages for the chat completions API
+        sys_promot = "you are a helpful assistant, you should provide useful answers to users."
+        messages = [
+            {"role": "system", "content": sys_promot},
+            {"role": "user", "content": []}]
+        for img in img_list:
+            messages[1]["content"].append(
+                {"image": f"data:image/png;base64,{encode_image(img)}"})
+        messages[1]["content"].append({"text": f"{prompt}"})
+
+        # Call the API
+        completion = client.chat.completions.create(
+            model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+            messages=messages,
+        )
+        
+        # Parse the response
+        result = completion.choices[0].message.content
+        
+        # Try to extract JSON if present
+        if '{"Rewritten"' in result:
+            try:
+                # Clean up the response
+                result = result.replace('```json', '').replace('```', '')
+                result_json = json.loads(result)
+                polished_prompt = result_json.get('Rewritten', result)
+            except:
+                polished_prompt = result
+        else:
+            polished_prompt = result
+            
+        polished_prompt = polished_prompt.strip().replace("\n", " ")
+        return polished_prompt
+        
+    except Exception as e:
+        print(f"Error during API call to Hugging Face: {e}")
+        # Fallback to original prompt if enhancement fails
+        return prompt
 
 def encode_image(pil_image):
     import io
@@ -187,6 +302,26 @@ def use_output_as_input(output_images):
     if output_images is None or len(output_images) == 0:
         return []
     return output_images
+
+def suggest_next_scene_prompt(images):
+    pil_images = []
+    if images is not None:
+        for item in images:
+            try:
+                if isinstance(item[0], Image.Image):
+                    pil_images.append(item[0].convert("RGB"))
+                elif isinstance(item[0], str):
+                    pil_images.append(Image.open(item[0]).convert("RGB"))
+                elif hasattr(item, "name"):
+                    pil_images.append(Image.open(item.name).convert("RGB"))
+            except Exception:
+                continue
+    if len(pil_images) > 0:
+        prompt = next_scene_prompt(pil_images)
+    else:
+        prompt = ""
+    print("next scene prompt: ", prompt)
+    return prompt
 
 # --- Main Inference Function (with hardcoded negative prompt) ---
 @spaces.GPU(duration=300)
@@ -381,6 +516,8 @@ with gr.Blocks(css=css) as demo:
         inputs=[result],
         outputs=[input_images]
     )
+
+    input_images.change(fn=suggest_next_scene_prompt, inputs=[input_images], outputs=[prompt])
 
 if __name__ == "__main__":
     demo.launch()
