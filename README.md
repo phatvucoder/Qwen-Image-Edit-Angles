@@ -1,6 +1,6 @@
 ---
 title: Qwen Image Edit Next Scene
-emoji: 👀💨
+emoji: 🎥
 colorFrom: indigo
 colorTo: blue
 sdk: gradio
