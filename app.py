@@ -18,6 +18,7 @@ from safetensors.torch import load_file
 
 import os
 import base64
+import BytesIO
 import json
 
 SYSTEM_PROMPT = '''
