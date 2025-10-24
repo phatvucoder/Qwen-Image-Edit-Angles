@@ -20,7 +20,6 @@ import os
 import base64
 from io import BytesIO
 import json
-import time
 
 SYSTEM_PROMPT = '''
 # Edit Instruction Rewriter
@@ -94,16 +93,13 @@ Please strictly follow the rewriting rules below:
 NEXT_SCENE_SYSTEM_PROMPT = '''
 # Next Scene Prompt Generator
 You are a cinematic AI director assistant. Your task is to analyze the provided image and generate a compelling "Next Scene" prompt that describes the natural cinematic progression from the current frame.
-
 ## Core Principles:
 - Think like a film director: Consider camera dynamics, visual composition, and narrative continuity
 - Create prompts that flow seamlessly from the current frame
 - Focus on **visual progression** rather than static modifications
 - Maintain compositional coherence while introducing organic transitions
-
 ## Prompt Structure:
 Always begin with "Next Scene: " followed by your cinematic description.
-
 ## Key Elements to Include:
 1. **Camera Movement**: Specify one of these or combinations:
    - Dolly shots (camera moves toward/away from subject)
@@ -112,38 +108,32 @@ Always begin with "Next Scene: " followed by your cinematic description.
    - Pan left/right
    - Tilt up/down
    - Zoom in/out
-
 2. **Framing Evolution**: Describe how the shot composition changes:
    - Wide to close-up transitions
    - Angle shifts (high angle to eye level, etc.)
    - Reframing of subjects
    - Revealing new elements in frame
-
 3. **Environmental Reveals** (if applicable):
    - New characters entering frame
    - Expanded scenery
    - Spatial progression
    - Background elements becoming visible
-
 4. **Atmospheric Shifts** (if enhancing the scene):
    - Lighting changes (golden hour, shadows, lens flare)
    - Weather evolution
    - Time-of-day transitions
    - Depth and mood indicators
-
 ## Guidelines:
 - Keep descriptions concise but vivid (2-3 sentences max)
 - Always specify the camera action first
 - Focus on what changes between this frame and the next
 - Maintain the scene's existing style and mood unless intentionally transitioning
 - Prefer natural, organic progressions over abrupt changes
-
 ## Example Outputs:
 - "Next Scene: The camera pulls back from a tight close-up on the airship to a sweeping aerial view, revealing an entire fleet of vessels soaring through a fantasy landscape."
 - "Next Scene: The camera tracks forward and tilts down, bringing the sun and helicopters closer into frame as a strong lens flare intensifies."
 - "Next Scene: The camera pans right, removing the dragon and rider from view while revealing more of the floating mountain range in the distance."
 - "Next Scene: The camera moves slightly forward as sunlight breaks through the clouds, casting a soft glow around the character's silhouette in the mist. Realistic cinematic style, atmospheric depth."
-
 ## Output Format:
 Return ONLY the next scene prompt as plain text, starting with "Next Scene: "
 Do NOT include JSON formatting or additional explanations.
@@ -188,157 +178,208 @@ def polish_prompt_hf(prompt, img_list):
         result = completion.choices[0].message.content
         
         # Try to extract JSON if present
-        if '{"Rewritten"' in result or '"Rewritten"' in result:
+        if '{"Rewritten"' in result:
             try:
-                result = result.replace('```json', '').replace('```', '').strip()
-                if result.startswith('{') and result.endswith('}'):
-                    result_json = json.loads(result)
-                    polished_prompt = result_json.get('Rewritten', result)
-                else:
-                    polished_prompt = result
-            except Exception as e:
-                print(f"JSON parsing failed: {e}")
+                # Clean up the response
+                result = result.replace('```json', '').replace('```', '')
+                result_json = json.loads(result)
+                polished_prompt = result_json.get('Rewritten', result)
+            except:
                 polished_prompt = result
         else:
             polished_prompt = result
             
         polished_prompt = polished_prompt.strip().replace("\n", " ")
-        print(f"Polished prompt from HF: {polished_prompt}")
         return polished_prompt
         
     except Exception as e:
         print(f"Error during API call to Hugging Face: {e}")
+        # Fallback to original prompt if enhancement fails
         return prompt
-
-def encode_image(img):
-    """Encode PIL Image to base64 string."""
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode()
-
-def suggest_next_scene_prompt_hf(img_list):
-    """
-    Generate a cinematic "Next Scene" prompt using Hugging Face InferenceClient.
-    """
-    api_key = os.environ.get("HF_TOKEN")
-    if not api_key or not img_list:
-        return ""
     
+def next_scene_prompt(original_prompt, img_list):
+    """
+    Rewrites the prompt using a Hugging Face InferenceClient.
+    Supports multiple images via img_list.
+    """
+    # Ensure HF_TOKEN is set
+    api_key = os.environ.get("HF_TOKEN")
+    if not api_key:
+        print("Warning: HF_TOKEN not set. Falling back to original prompt.")
+        return original_prompt
+    prompt = f"{NEXT_SCENE_SYSTEM_PROMPT}"
+    system_prompt = "you are a helpful assistant, you should provide useful answers to users."
     try:
+        # Initialize the client
         client = InferenceClient(
-            provider="cerebras",
+            provider="nebius",
             api_key=api_key,
         )
-        
-        messages = [
-            {"role": "system", "content": NEXT_SCENE_SYSTEM_PROMPT},
-            {"role": "user", "content": []}
+
+        # Convert list of images to base64 data URLs
+        image_urls = []
+        if img_list is not None:
+            # Ensure img_list is actually a list
+            if not isinstance(img_list, list):
+                img_list = [img_list]
+            
+            for img in img_list:
+                image_url = None
+                # If img is a PIL Image
+                if hasattr(img, 'save'):  # Check if it's a PIL Image
+                    buffered = BytesIO()
+                    img.save(buffered, format="PNG")
+                    img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                    image_url = f"data:image/png;base64,{img_base64}"
+                # If img is already a file path (string)
+                elif isinstance(img, str):
+                    with open(img, "rb") as image_file:
+                        img_base64 = base64.b64encode(image_file.read()).decode('utf-8')
+                    image_url = f"data:image/png;base64,{img_base64}"
+                else:
+                    print(f"Warning: Unexpected image type: {type(img)}, skipping...")
+                    continue
+                
+                if image_url:
+                    image_urls.append(image_url)
+
+        # Build the content array with text first, then all images
+        content = [
+            {
+                "type": "text",
+                "text": prompt
+            }
         ]
         
-        for img in img_list:
-            messages[1]["content"].append(
-                {"image": f"data:image/png;base64,{encode_image(img)}"})
-        messages[1]["content"].append({"text": "Generate a natural next scene prompt for this image."})
-        
+        # Add all images to the content
+        for image_url in image_urls:
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url
+                }
+            })
+
+        # Format the messages for the chat completions API
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": content
+            }
+        ]
+
+        # Call the API
         completion = client.chat.completions.create(
-            model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+            model="Qwen/Qwen2.5-VL-72B-Instruct",
             messages=messages,
         )
         
-        result = completion.choices[0].message.content.strip()
-        print(f"Generated Next Scene prompt: {result}")
-        return result
+        # Parse the response
+        result = completion.choices[0].message.content
+        
+        # Try to extract JSON if present
+        if '"Rewritten"' in result:
+            try:
+                # Clean up the response
+                result = result.replace('```json', '').replace('```', '')
+                result_json = json.loads(result)
+                polished_prompt = result_json.get('Rewritten', result)
+            except:
+                polished_prompt = result
+        else:
+            polished_prompt = result
+            
+        polished_prompt = polished_prompt.strip().replace("\n", " ")
+        return polished_prompt
         
     except Exception as e:
-        print(f"Error generating next scene prompt: {e}")
-        return ""
+        print(f"Error during API call to Hugging Face: {e}")
+        # Fallback to original prompt if enhancement fails
+        return original_prompt 
 
-def suggest_next_scene_prompt(images):
-    """
-    Wrapper function to generate next scene prompt from image gallery.
-    """
-    if not images:
-        return ""
-    
-    pil_images = []
-    for item in images:
-        try:
-            if isinstance(item[0], Image.Image):
-                pil_images.append(item[0].convert("RGB"))
-            elif isinstance(item[0], str):
-                pil_images.append(Image.open(item[0]).convert("RGB"))
-            elif hasattr(item, "name"):
-                pil_images.append(Image.open(item.name).convert("RGB"))
-        except Exception as e:
-            print(f"Error processing image: {e}")
-            continue
-    
-    if not pil_images:
-        return ""
-        
-    return suggest_next_scene_prompt_hf(pil_images)
+
+
+def encode_image(pil_image):
+    import io
+    buffered = io.BytesIO()
+    pil_image.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 # --- Model Loading ---
 dtype = torch.bfloat16
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-pipe = QwenImageEditPlusPipeline.from_pretrained("Phr00t/Qwen-Image-Edit-Rapid-AIO", torch_dtype=dtype).to(device)
+pipe = QwenImageEditPlusPipeline.from_pretrained("Qwen/Qwen-Image-Edit-2509", 
+                                                transformer= QwenImageTransformer2DModel.from_pretrained("linoyts/Qwen-Image-Edit-Rapid-AIO", 
+                                                                                                         subfolder='transformer',
+                                                                                                         torch_dtype=dtype,
+                                                                                                         device_map='cuda'),torch_dtype=dtype).to(device)
+
+pipe.load_lora_weights(
+        "lovis93/next-scene-qwen-image-lora-2509", 
+        weight_name="next-scene_lora-v2-3000.safetensors", adapter_name="next-scene"
+    )
+pipe.set_adapters(["next-scene"], adapter_weights=[1.])
+pipe.fuse_lora(adapter_names=["next-scene"], lora_scale=1.)
+pipe.unload_lora_weights()
+
+
+# Apply the same optimizations from the first version
 pipe.transformer.__class__ = QwenImageTransformer2DModel
 pipe.transformer.set_attn_processor(QwenDoubleStreamAttnProcessorFA3())
 
 # --- Ahead-of-time compilation ---
-optimize_pipeline_(pipe, image=Image.new("RGB", (1024, 1024)), prompt="prompt")
+optimize_pipeline_(pipe, image=[Image.new("RGB", (1024, 1024)), Image.new("RGB", (1024, 1024))], prompt="prompt")
 
-# --- Constants ---
+# --- UI Constants and Helpers ---
 MAX_SEED = np.iinfo(np.int32).max
 
-# --- Helper Functions ---
 def use_output_as_input(output_images):
-    """Convert the first image from the result gallery to input format."""
-    if output_images and len(output_images) > 0:
-        # output_images is a list of images
-        first_image = output_images[0]
-        # Return in the format expected by the Gallery: list of tuples
-        return [first_image]
-    return None
+    """Convert output images to input format for the gallery"""
+    if output_images is None or len(output_images) == 0:
+        return []
+    return output_images
 
-def update_history(new_images, history):
-    """Updates the history gallery with new images."""
-    time.sleep(0.5)  # Small delay to ensure images are ready
-    if history is None:
-        history = []
-    if new_images is not None and len(new_images) > 0:
-        # Convert to list if needed
-        if not isinstance(history, list):
-            history = list(history) if history else []
-        # Add all new images to the beginning of history
-        for img in new_images:
-            history.insert(0, img)
-    # Keep only the last 20 images in history
-    history = history[:20]
-    return history
+def suggest_next_scene_prompt(images):
+    pil_images = []
+    if images is not None:
+        for item in images:
+            try:
+                if isinstance(item[0], Image.Image):
+                    pil_images.append(item[0].convert("RGB"))
+                elif isinstance(item[0], str):
+                    pil_images.append(Image.open(item[0]).convert("RGB"))
+                elif hasattr(item, "name"):
+                    pil_images.append(Image.open(item.name).convert("RGB"))
+            except Exception:
+                continue
+    if len(pil_images) > 0:
+        prompt = next_scene_prompt("", pil_images)
+    else:
+        prompt = ""
+    print("next scene prompt: ", prompt)
+    return prompt
 
-def use_history_as_input(evt: gr.SelectData):
-    """Sets the selected history image as the new input image."""
-    # evt.value contains the selected image
-    if evt.value is not None:
-        return [evt.value]
-    return None
-
-# --- Inference Function ---
-@spaces.GPU
+# --- Main Inference Function (with hardcoded negative prompt) ---
+@spaces.GPU(duration=300)
 def infer(
-    images, 
-    prompt, 
-    seed=42, 
-    randomize_seed=False, 
-    true_guidance_scale=1.0, 
-    num_inference_steps=8,
+    images,
+    prompt,
+    seed=42,
+    randomize_seed=False,
+    true_guidance_scale=1.0,
+    num_inference_steps=4,
     height=None,
     width=None,
-    rewrite_prompt=False,
-    num_images_per_prompt=1
+    rewrite_prompt=True,
+    num_images_per_prompt=1,
+    progress=gr.Progress(track_tqdm=True),
 ):
+    """
+    Generates an image using the local Qwen-Image diffusers pipeline.
+    """
+    # Hardcode the negative prompt as requested
     negative_prompt = " "
     
     if randomize_seed:
@@ -428,22 +469,6 @@ with gr.Blocks(css=css) as demo:
                 result = gr.Gallery(label="Result", show_label=False, type="pil")
                 # Add this button right after the result gallery - initially hidden
                 use_output_btn = gr.Button("↗️ Use as input", variant="secondary", size="sm", visible=False)
-                
-                # Add history section
-                gr.Markdown("---")
-                with gr.Row():
-                    gr.Markdown("### 📜 History")
-                    clear_history_button = gr.Button("🗑️ Clear History", size="sm", variant="stop")
-                
-                history_gallery = gr.Gallery(
-                    label="Click any image to use as input", 
-                    columns=4, 
-                    rows=2,
-                    object_fit="contain", 
-                    height="auto",
-                    interactive=False,
-                    show_label=True
-                )
 
         with gr.Row():
             prompt = gr.Text(
@@ -506,7 +531,6 @@ with gr.Blocks(css=css) as demo:
 
         # gr.Examples(examples=examples, inputs=[prompt], outputs=[result, seed], fn=infer, cache_examples=False)
 
-    # Main generation events
     gr.on(
         triggers=[run_button.click, prompt.submit],
         fn=infer,
@@ -521,34 +545,14 @@ with gr.Blocks(css=css) as demo:
             width,
             rewrite_prompt,
         ],
-        outputs=[result, seed, use_output_btn],
-    ).then(
-        fn=update_history,
-        inputs=[result, history_gallery],
-        outputs=history_gallery,
-        show_api=False
+        outputs=[result, seed, use_output_btn],  # Added use_output_btn to outputs
     )
 
-    # Add the event handler for the "Use Output as Input" button
+    # Add the new event handler for the "Use Output as Input" button
     use_output_btn.click(
         fn=use_output_as_input,
         inputs=[result],
         outputs=[input_images]
-    )
-    
-    # History gallery select handler
-    history_gallery.select(
-        fn=use_history_as_input,
-        outputs=[input_images],
-        show_api=False
-    )
-    
-    # Clear history button
-    clear_history_button.click(
-        fn=lambda: [],
-        inputs=None,
-        outputs=history_gallery,
-        show_api=False
     )
 
     input_images.change(fn=suggest_next_scene_prompt, inputs=[input_images], outputs=[prompt])
