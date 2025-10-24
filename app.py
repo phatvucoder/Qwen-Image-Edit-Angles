@@ -22,6 +22,36 @@ from io import BytesIO
 import json
 import time  # Added for history update delay
 
+from gradio_client import Client, handle_file
+import tempfile
+
+def turn_into_video(input_images, output_images, prompt):
+    """Calls multimodalart/wan-2-2-first-last-frame space to generate a video."""
+    if not input_images or not output_images:
+        raise gr.Error("Please generate at least one result first.")
+
+    # Take the first input and first output frame
+    start_img = input_images[0][0] if isinstance(input_images[0], tuple) else input_images[0]
+    end_img = output_images[0]
+
+    # Save them temporarily
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_start, \
+         tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_end:
+        start_img.save(tmp_start.name)
+        end_img.save(tmp_end.name)
+
+        client = Client("multimodalart/wan-2-2-first-last-frame")  
+
+        # Run inference on the remote space
+        result = client.predict(
+            start_image_pil={"image": handle_file(tmp_start.name)},
+            end_image_pil={"image": handle_file(tmp_end.name)},
+            prompt=prompt or "generate smooth cinematic transition",
+            api_name="/generate_video"  # must match the remote Space’s API function name
+        )
+    return result, gr.update(visible=True)
+
+
 SYSTEM_PROMPT = '''
 # Edit Instruction Rewriter
 You are a professional edit instruction rewriter. Your task is to generate a precise, concise, and visually achievable professional-level edit instruction based on the user-provided instruction and the image to be edited.  
@@ -141,7 +171,7 @@ Do NOT include JSON formatting or additional explanations.
 '''
 
 # --- Prompt Enhancement using Hugging Face InferenceClient ---
-def polish_prompt_hf(prompt, img_list):
+def polish_prompt_hf(original_prompt, img_list):
     """
     Rewrites the prompt using a Hugging Face InferenceClient.
     """
@@ -149,13 +179,13 @@ def polish_prompt_hf(prompt, img_list):
     api_key = os.environ.get("HF_TOKEN")
     if not api_key:
         print("Warning: HF_TOKEN not set. Falling back to original prompt.")
-        return prompt
+        return original_prompt
 
     try:
         # Initialize the client
-        prompt = f"{SYSTEM_PROMPT}\n\nUser Input: {prompt}\n\nRewritten Prompt:"
+        prompt = f"{SYSTEM_PROMPT}\n\nUser Input: {original_prompt}\n\nRewritten Prompt:"
         client = InferenceClient(
-            provider="cerebras",
+            provider="nebius",
             api_key=api_key,
         )
 
@@ -171,7 +201,7 @@ def polish_prompt_hf(prompt, img_list):
 
         # Call the API
         completion = client.chat.completions.create(
-            model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+            model="Qwen/Qwen2.5-VL-72B-Instruct",
             messages=messages,
         )
         
@@ -179,7 +209,7 @@ def polish_prompt_hf(prompt, img_list):
         result = completion.choices[0].message.content
         
         # Try to extract JSON if present
-        if '{"Rewritten"' in result:
+        if '"Rewritten"' in result:
             try:
                 # Clean up the response
                 result = result.replace('```json', '').replace('```', '')
@@ -196,7 +226,7 @@ def polish_prompt_hf(prompt, img_list):
     except Exception as e:
         print(f"Error during API call to Hugging Face: {e}")
         # Fallback to original prompt if enhancement fails
-        return prompt
+        return original_prompt
     
 def next_scene_prompt(original_prompt, img_list):
     """
@@ -445,7 +475,8 @@ def infer(
     ).images
 
     # Return images, seed, and make button visible
-    return image, seed, gr.update(visible=True)
+    return image, seed, gr.update(visible=True), gr.update(visible=True)
+
 
 # --- Examples and UI Layout ---
 examples = []
@@ -544,8 +575,10 @@ with gr.Blocks(css=css) as demo:
 
             with gr.Column():
                 result = gr.Gallery(label="Result", show_label=False, type="pil")
-                # Add this button right after the result gallery - initially hidden
-                use_output_btn = gr.Button("↗️ Use as input", variant="secondary", size="sm", visible=False)
+                with gr.Row():
+                    use_output_btn = gr.Button("↗️ Use as input", variant="secondary", size="sm", visible=False)
+                    turn_video_btn = gr.Button("🎬 Turn into Video", variant="secondary", size="sm", visible=False)
+                output_video = gr.Video(label="Generated Video", autoplay=True, visible=False)
 
                 with gr.Row():
                     gr.Markdown("### 📜 History")
@@ -583,7 +616,8 @@ with gr.Blocks(css=css) as demo:
             width,
             rewrite_prompt,
         ],
-        outputs=[result, seed, use_output_btn],  # Added use_output_btn to outputs
+        outputs=[result, seed, use_output_btn, turn_video_btn],
+
     ).then(
     fn=update_history,
     inputs=[result, history_gallery],
@@ -614,6 +648,13 @@ with gr.Blocks(css=css) as demo:
     )
 
     input_images.change(fn=suggest_next_scene_prompt, inputs=[input_images], outputs=[prompt])
+
+    turn_video_btn.click(
+    fn=turn_into_video,
+    inputs=[input_images, result, prompt],
+    outputs=[output_video, output_video],
+)
+
 
 if __name__ == "__main__":
     demo.launch()
