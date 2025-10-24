@@ -489,6 +489,58 @@ with gr.Blocks(css=css) as demo:
                     placeholder="Next scene: The camera dollies in to a tight close-up...",
             )
                 run_button = gr.Button("Edit!", variant="primary")
+                
+                with gr.Accordion("Advanced Settings", open=False):
+                    
+        
+                    seed = gr.Slider(
+                        label="Seed",
+                        minimum=0,
+                        maximum=MAX_SEED,
+                        step=1,
+                        value=0,
+                    )
+        
+                    randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
+        
+                    with gr.Row():
+        
+                        true_guidance_scale = gr.Slider(
+                            label="True guidance scale",
+                            minimum=1.0,
+                            maximum=10.0,
+                            step=0.1,
+                            value=1.0
+                        )
+
+                        num_inference_steps = gr.Slider(
+                            label="Number of inference steps",
+                            minimum=1,
+                            maximum=40,
+                            step=1,
+                            value=4,
+                        )
+                        
+                        height = gr.Slider(
+                            label="Height",
+                            minimum=256,
+                            maximum=2048,
+                            step=8,
+                            value=None,
+                        )
+                        
+                        width = gr.Slider(
+                            label="Width",
+                            minimum=256,
+                            maximum=2048,
+                            step=8,
+                            value=None,
+                        )
+                        
+                        
+                        rewrite_prompt = gr.Checkbox(label="Rewrite prompt", value=False)
+
+        
 
             with gr.Column():
                 result = gr.Gallery(label="Result", show_label=False, type="pil")
@@ -506,57 +558,7 @@ with gr.Blocks(css=css) as demo:
                 )
 
 
-        with gr.Accordion("Advanced Settings", open=False):
-            # Negative prompt UI element is removed here
-
-            seed = gr.Slider(
-                label="Seed",
-                minimum=0,
-                maximum=MAX_SEED,
-                step=1,
-                value=0,
-            )
-
-            randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
-
-            with gr.Row():
-
-                true_guidance_scale = gr.Slider(
-                    label="True guidance scale",
-                    minimum=1.0,
-                    maximum=10.0,
-                    step=0.1,
-                    value=1.0
-                )
-
-                num_inference_steps = gr.Slider(
-                    label="Number of inference steps",
-                    minimum=1,
-                    maximum=40,
-                    step=1,
-                    value=4,
-                )
-                
-                height = gr.Slider(
-                    label="Height",
-                    minimum=256,
-                    maximum=2048,
-                    step=8,
-                    value=None,
-                )
-                
-                width = gr.Slider(
-                    label="Width",
-                    minimum=256,
-                    maximum=2048,
-                    step=8,
-                    value=None,
-                )
-                
-                
-                rewrite_prompt = gr.Checkbox(label="Rewrite prompt", value=False)
-
-        # gr.Examples(examples=examples, inputs=[prompt], outputs=[result, seed], fn=infer, cache_examples=False)
+        
 
     gr.on(
         triggers=[run_button.click, prompt.submit],
