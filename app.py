@@ -70,7 +70,7 @@ def turn_into_video(input_images, output_images, prompt, progress=gr.Progress(tr
         )
 
     progress(0.95, desc="Finalizing...")
-    return result 
+    return result[0] 
 
 
 
