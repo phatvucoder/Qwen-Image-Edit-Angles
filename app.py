@@ -602,14 +602,15 @@ with gr.Blocks(css=css) as demo:
                     turn_video_btn = gr.Button("🎬 Turn into Video", variant="secondary", size="sm", visible=False)
                 output_video = gr.Video(label="Generated Video", autoplay=True, visible=False)
 
-                with gr.Row():
+                with gr.Row(visible=False):
                     gr.Markdown("### 📜 History")
                     clear_history_button = gr.Button("🗑️ Clear History", size="sm", variant="stop")
                 
                 history_gallery = gr.Gallery(
                     label="Click any image to use as input", 
                     interactive=False,
-                    show_label=True
+                    show_label=True,
+                    visible=False
                 )
 
         gr.Examples(examples=[
