@@ -11,18 +11,13 @@ from qwenimage.pipeline_qwenimage_edit_plus import QwenImageEditPlusPipeline
 from qwenimage.transformer_qwenimage import QwenImageTransformer2DModel
 from qwenimage.qwen_fa3_processor import QwenDoubleStreamAttnProcessorFA3
 
-from huggingface_hub import InferenceClient
+
 import math
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 
 import os
-import base64
-from io import BytesIO
-import json
-import time  # Added for history update delay
 
-from gradio_client import Client, handle_file
 import tempfile
 from PIL import Image
 import os
