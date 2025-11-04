@@ -219,7 +219,7 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     ).then(fn=end_reset, inputs=None, outputs=[is_reset], queue=False)
 
     # Live updates
-    def maybe_infer(is_reset, *args):
+    def maybe_infer(is_reset, progress=gr.Progress(track_tqdm=True), *args):
         if is_reset:
             return gr.update(), gr.update(), gr.update()
         else:
@@ -233,7 +233,7 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     control_inputs_with_flag = [is_reset] + control_inputs
 
     for control in [rotate_deg, move_forward, vertical_tilt, wideangle]:
-        control.change(fn=maybe_infer, inputs=control_inputs_with_flag, trigger_mode="always_last", outputs=outputs)
+        control.release(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs)
 
     run_event.then(lambda img, *_: img, inputs=[result], outputs=[prev_output])
 
