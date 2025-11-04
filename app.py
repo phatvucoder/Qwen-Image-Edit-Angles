@@ -232,9 +232,11 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     ]
     control_inputs_with_flag = [is_reset] + control_inputs
 
-    for control in [rotate_deg, move_forward, vertical_tilt, wideangle]:
+    for control in [rotate_deg, move_forward, vertical_tilt]:
         control.release(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs)
-
+    
+    wideangle.change(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs)
+    
     run_event.then(lambda img, *_: img, inputs=[result], outputs=[prev_output])
 
 demo.launch()
