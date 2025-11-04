@@ -151,8 +151,10 @@ def end_reset():
 with gr.Blocks(css=css) as demo:
     with gr.Column(elem_id="col-container"):
         gr.Markdown("## 🎬 Qwen Image Edit — Camera Angle Control")
-        gr.Markdown(
-            ""
+        gr.Markdown("""
+            Qwen Image Edit 2509 for Camera Control ✨ 
+            Using [dx8152's Qwen-Edit-2509-Multiple-angles LoRA](https://huggingface.co/dx8152/Qwen-Edit-2509-Multiple-angles) and [Phr00t/Qwen-Image-Edit-Rapid-AIO](https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/tree/main) for 4-step inference 💨
+            """
         )
 
         with gr.Row():
@@ -161,13 +163,14 @@ with gr.Blocks(css=css) as demo:
                 prev_output = gr.State(value=None)
                 is_reset = gr.State(value=False)
 
-                with gr.Group():
+                with gr.Tab("Camera Controls"):
                     rotate_deg = gr.Slider(label="Rotate Left–Right (°)", minimum=-90, maximum=90, step=45, value=0)
                     move_forward = gr.Slider(label="Move Forward → Close-Up", minimum=0, maximum=10, step=5, value=0)
                     vertical_tilt = gr.Slider(label="Vertical Angle (Bird ↔ Worm)", minimum=-1, maximum=1, step=1, value=0)
                     wideangle = gr.Checkbox(label="Wide-Angle Lens", value=False)
-                    with gr.Row():
-                        reset_btn = gr.Button("reset settings")
+                with gr.Row():
+                        reset_btn = gr.Button("Reset")
+                        run_btn = gr.Button("Generate", variant="primary")
 
                 with gr.Accordion("Advanced Settings", open=False):
                     seed = gr.Slider(label="Seed", minimum=0, maximum=MAX_SEED, step=1, value=0)
@@ -178,7 +181,7 @@ with gr.Blocks(css=css) as demo:
                     width = gr.Slider(label="Width", minimum=256, maximum=2048, step=8, value=1024)
 
                 
-                    run_btn = gr.Button("Generate", variant="primary", visible=False)
+                    
 
             with gr.Column():
                 result = gr.Image(label="Output Image")
