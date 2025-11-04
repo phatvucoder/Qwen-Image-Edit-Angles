@@ -225,7 +225,7 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
             return infer_camera_edit(*args)
 
     control_inputs = [
-        image, rotate_deg, move_forward,
+        image, prev_output, rotate_deg, move_forward,
         vertical_tilt, wideangle,
         seed, randomize_seed, true_guidance_scale, num_inference_steps, height, width
     ]
