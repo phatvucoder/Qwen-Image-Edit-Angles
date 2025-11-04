@@ -84,7 +84,7 @@ def build_camera_prompt(rotate_deg, move_forward, vertical_tilt, wideangle):
         prompt_parts.append(" 将镜头转为广角镜头 Turn the camera to a wide-angle lens.")
 
     final_prompt = " ".join(prompt_parts).strip()
-    return final_prompt if final_prompt else ""
+    return final_prompt if final_prompt else "no camera movement"
 
 
 @spaces.GPU
@@ -122,6 +122,8 @@ def infer_camera_edit(
     if len(pil_images) == 0:
         raise gr.Error("Please upload an image first.")
 
+    if prompt == "no camera movement":
+        return image, seed, prompt
     result = pipe(
         image=pil_images,
         prompt=prompt,
@@ -148,7 +150,7 @@ def end_reset():
     return False
 
 
-with gr.Blocks(css=css) as demo:
+with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     with gr.Column(elem_id="col-container"):
         gr.Markdown("## 🎬 Qwen Image Edit — Camera Angle Control")
         gr.Markdown("""
