@@ -151,6 +151,27 @@ def reset_all():
 def end_reset():
     return False
 
+def update_dimensions_on_upload(image):
+    if image is None:
+        return 1024, 1024
+    
+    original_width, original_height = image.size
+    
+    if original_width > original_height:
+        new_width = 1024
+        aspect_ratio = original_height / original_width
+        new_height = int(new_width * aspect_ratio)
+    else:
+        new_height = 1024
+        aspect_ratio = original_width / original_height
+        new_width = int(new_height * aspect_ratio)
+        
+    # Ensure dimensions are multiples of 8
+    new_width = (new_width // 8) * 8
+    new_height = (new_height // 8) * 8
+    
+    return new_width, new_height
+
 
 with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     with gr.Column(elem_id="col-container"):
@@ -209,14 +230,24 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
 
     # Manual generation
     run_event = run_btn.click(fn=infer_camera_edit, inputs=inputs, outputs=outputs)
-
-    # Image upload resets
+    
+    # Image upload triggers dimension update and control reset
     image.change(
+        fn=update_dimensions_on_upload,
+        inputs=[image],
+        outputs=[width, height]
+    ).then(
         fn=reset_all,
         inputs=None,
         outputs=[rotate_deg, move_forward, vertical_tilt, wideangle, is_reset],
         queue=False
-    ).then(fn=end_reset, inputs=None, outputs=[is_reset], queue=False)
+    ).then(
+        fn=end_reset, 
+        inputs=None, 
+        outputs=[is_reset], 
+        queue=False
+    )
+
 
     # Live updates
     def maybe_infer(is_reset, progress=gr.Progress(track_tqdm=True), *args):
