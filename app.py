@@ -235,7 +235,7 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
         examples=[
             ["tool_of_the_sea.png", 45, 0, 0, False, 0, True, 1.0, 4, 568, 1024],
             ["monkey.jpg", -45, 5, 0, False, 0, True, 1.0, 4, 704, 1024],
-            ["metropolis.jpg", 0, 0, -1, True, 0, True, 1.0, 4, 816, 1024],
+            ["metropolis.jpg", 0, 0, -1, False, 0, True, 1.0, 4, 816, 1024],
         ],
         inputs=[image,rotate_deg, move_forward,
         vertical_tilt, wideangle,
