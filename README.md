@@ -1,8 +1,8 @@
 ---
-title: Qwen Image Edit Next Scene
-emoji: 🎥
+title: Qwen Image Edit Camera Control
+emoji: 🎬
 colorFrom: indigo
-colorTo: blue
+colorTo: pink
 sdk: gradio
 sdk_version: 5.49.1
 app_file: app.py
