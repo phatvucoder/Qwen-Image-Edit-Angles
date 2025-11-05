@@ -150,26 +150,43 @@ def infer_camera_edit(
 
     return result, seed, prompt
 
-def create_video_between_images(input_image: str, output_image: str, prompt: str) -> str:
+def create_video_between_images(input_image, output_image, prompt: str) -> str:
     """Create a video between the input and output images."""
     if input_image is None or output_image is None:
         raise gr.Error("Both input and output images are required to create a video.")
-        
+    
     try:
-        # Save images to temporary files if they're not already file paths
-        if isinstance(input_image, Image.Image):
+        # Convert input image to file path
+        if isinstance(input_image, np.ndarray):
+            # Convert numpy array to PIL Image
+            input_pil = Image.fromarray(input_image.astype('uint8'))
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                input_pil.save(tmp.name)
+                input_image_path = tmp.name
+        elif isinstance(input_image, Image.Image):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                 input_image.save(tmp.name)
                 input_image_path = tmp.name
-        else:
+        elif isinstance(input_image, str):
             input_image_path = input_image
+        else:
+            raise gr.Error(f"Unsupported input image type: {type(input_image)}")
         
-        if isinstance(output_image, Image.Image):
+        # Convert output image to file path
+        if isinstance(output_image, np.ndarray):
+            # Convert numpy array to PIL Image
+            output_pil = Image.fromarray(output_image.astype('uint8'))
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                output_pil.save(tmp.name)
+                output_image_path = tmp.name
+        elif isinstance(output_image, Image.Image):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                 output_image.save(tmp.name)
                 output_image_path = tmp.name
-        else:
+        elif isinstance(output_image, str):
             output_image_path = output_image
+        else:
+            raise gr.Error(f"Unsupported output image type: {type(output_image)}")
         
         # Generate the video
         video_path = _generate_video_segment(
