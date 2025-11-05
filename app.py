@@ -144,8 +144,6 @@ css = '''#col-container { max-width: 800px; margin: 0 auto; }
 .dark .progress-text{color: white !important}
 #examples{max-width: 800px; margin: 0 auto; }'''
 
-is_reset = gr.State(value=False)
-
 def reset_all():
     return [0, 0, 0, 0, False, True]
 
@@ -187,7 +185,7 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
             with gr.Column():
                 image = gr.Image(label="Input Image", type="pil", sources=["upload"])
                 prev_output = gr.Image(value=None, visible=False)
-                is_reset = gr.State(value=False)
+                is_reset = gr.Checkbox(value=False, visible=False)
 
                 with gr.Tab("Camera Controls"):
                     rotate_deg = gr.Slider(label="Rotate Left–Right (degrees °)", minimum=-90, maximum=90, step=45, value=0)
