@@ -90,7 +90,6 @@ def build_camera_prompt(rotate_deg, move_forward, vertical_tilt, wideangle):
 @spaces.GPU
 def infer_camera_edit(
     image,
-    prev_output,
     rotate_deg,
     move_forward,
     vertical_tilt,
@@ -101,6 +100,7 @@ def infer_camera_edit(
     num_inference_steps,
     height,
     width,
+    prev_output=None,
     progress=gr.Progress(track_tqdm=True)
 ):
     prompt = build_camera_prompt(rotate_deg, move_forward, vertical_tilt, wideangle)
@@ -215,9 +215,9 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
                 #gr.Markdown("_Each change applies a fresh camera instruction to the last output image._")
 
     inputs = [
-        image, prev_output, rotate_deg, move_forward,
+        image, rotate_deg, move_forward,
         vertical_tilt, wideangle,
-        seed, randomize_seed, true_guidance_scale, num_inference_steps, height, width
+        seed, randomize_seed, true_guidance_scale, num_inference_steps, height, width, prev_output
     ]
     outputs = [result, seed, prompt_preview]
 
@@ -240,7 +240,7 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
             ["metropolis.jpg", None, 0, 0, -1, True, 0, True, 1.0, 4, 816, 1024],
         ],
         inputs=[
-            image, prev_output, rotate_deg, move_forward,
+            image, rotate_deg, move_forward,
             vertical_tilt, wideangle,
             seed, randomize_seed, true_guidance_scale, num_inference_steps, height, width
         ],
@@ -276,9 +276,9 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
             return infer_camera_edit(*args)
 
     control_inputs = [
-        image, prev_output, rotate_deg, move_forward,
+        image, rotate_deg, move_forward,
         vertical_tilt, wideangle,
-        seed, randomize_seed, true_guidance_scale, num_inference_steps, height, width
+        seed, randomize_seed, true_guidance_scale, num_inference_steps, height, width, prev_output
     ]
     control_inputs_with_flag = [is_reset] + control_inputs
 
