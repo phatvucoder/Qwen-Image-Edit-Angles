@@ -19,6 +19,8 @@ import os
 from PIL import Image
 import os
 import gradio as gr
+from gradio_client import Client, handle_file
+import tempfile
 
 
 # --- Model Loading ---
@@ -54,6 +56,16 @@ optimize_pipeline_(pipe, image=[Image.new("RGB", (1024, 1024)), Image.new("RGB",
 
 
 MAX_SEED = np.iinfo(np.int32).max
+
+def _generate_video_segment(input_image_path: str, output_image_path: str, prompt: str) -> str:
+    """Generates a single video segment using the external service."""
+    video_client = Client("multimodalart/wan-2-2-first-last-frame")
+    result = video_client.predict(
+        start_image_pil=handle_file(input_image_path),
+        end_image_pil=handle_file(output_image_path),
+        prompt=prompt, api_name="/generate_video"
+    )
+    return result[0]["video"]
 
 def build_camera_prompt(rotate_deg, move_forward, vertical_tilt, wideangle):
     prompt_parts = []
@@ -138,6 +150,37 @@ def infer_camera_edit(
 
     return result, seed, prompt
 
+def create_video_between_images(input_image: str, output_image: str, prompt: str) -> str:
+    """Create a video between the input and output images."""
+    if not input_image or not output_image:
+        raise gr.Error("Both input and output images are required to create a video.")
+    
+    try:
+        # Save images to temporary files if they're not already file paths
+        if isinstance(input_image, Image.Image):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                input_image.save(tmp.name)
+                input_image_path = tmp.name
+        else:
+            input_image_path = input_image
+        
+        if isinstance(output_image, Image.Image):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                output_image.save(tmp.name)
+                output_image_path = tmp.name
+        else:
+            output_image_path = output_image
+        
+        # Generate the video
+        video_path = _generate_video_segment(
+            input_image_path, 
+            output_image_path, 
+            prompt if prompt else "Camera movement transformation"
+        )
+        return video_path
+    except Exception as e:
+        raise gr.Error(f"Video generation failed: {e}")
+
 
 # --- UI ---
 css = '''#col-container { max-width: 800px; margin: 0 auto; }
@@ -210,8 +253,10 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
             with gr.Column():
                 result = gr.Image(label="Output Image", interactive=False)
                 prompt_preview = gr.Textbox(label="Processed Prompt", interactive=False)
-                #gr.Markdown("_Each change applies a fresh camera instruction to the last output image._")
-
+                create_video_button = gr.Button("🎥 Create Video Between Images", variant="secondary", visible=False)
+                with gr.Group(visible=False) as video_group:
+                    video_output = gr.Video(label="Generated Video", show_download_button=True, autoplay=True)
+                    
     inputs = [
         image,rotate_deg, move_forward,
         vertical_tilt, wideangle,
@@ -227,8 +272,30 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
         queue=False
     ).then(fn=end_reset, inputs=None, outputs=[is_reset], queue=False)
 
-    # Manual generation
-    run_event = run_btn.click(fn=infer_camera_edit, inputs=inputs, outputs=outputs)
+    # Manual generation with video button visibility control
+    def infer_and_show_video_button(*args):
+        result_img, result_seed, result_prompt = infer_camera_edit(*args)
+        # Show video button if we have both input and output images
+        show_button = args[0] is not None and result_img is not None
+        return result_img, result_seed, result_prompt, gr.update(visible=show_button)
+    
+    run_event = run_btn.click(
+        fn=infer_and_show_video_button, 
+        inputs=inputs, 
+        outputs=outputs + [create_video_button]
+    )
+
+    # Video creation
+    create_video_button.click(
+        fn=lambda: gr.update(visible=True), 
+        outputs=[video_group],
+        api_name=False
+    ).then(
+        fn=create_video_between_images,
+        inputs=[image, result, prompt_preview],
+        outputs=[video_output],
+        api_name=False
+    )
 
     # Examples
     gr.Examples(
@@ -267,9 +334,12 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     # Live updates
     def maybe_infer(is_reset, progress=gr.Progress(track_tqdm=True), *args):
         if is_reset:
-            return gr.update(), gr.update(), gr.update()
+            return gr.update(), gr.update(), gr.update(), gr.update()
         else:
-            return infer_camera_edit(*args)
+            result_img, result_seed, result_prompt = infer_camera_edit(*args)
+            # Show video button if we have both input and output
+            show_button = args[0] is not None and result_img is not None
+            return result_img, result_seed, result_prompt, gr.update(visible=show_button)
 
     control_inputs = [
         image, rotate_deg, move_forward,
@@ -279,9 +349,9 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     control_inputs_with_flag = [is_reset] + control_inputs
 
     for control in [rotate_deg, move_forward, vertical_tilt]:
-        control.release(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs)
+        control.release(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs + [create_video_button])
     
-    wideangle.change(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs)
+    wideangle.change(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs + [create_video_button])
     
     run_event.then(lambda img, *_: img, inputs=[result], outputs=[prev_output])
 
