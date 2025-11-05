@@ -68,7 +68,7 @@ def build_camera_prompt(rotate_deg, move_forward, vertical_tilt, wideangle):
 
 
     # Move forward / close-up
-    if move_forward >= 5:
+    if move_forward > 5:
         prompt_parts.append("将镜头转为特写镜头 Turn the camera to a close-up.")
     elif move_forward >= 1:
         prompt_parts.append("将镜头向前移动 Move the camera forward.")
@@ -183,12 +183,12 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
 
         with gr.Row():
             with gr.Column():
-                image = gr.Image(label="Input Image", type="pil", sources=["upload"])
+                image = gr.Image(label="Input Image", type="pil")
                 prev_output = gr.Image(value=None, visible=False)
                 is_reset = gr.Checkbox(value=False, visible=False)
 
                 with gr.Tab("Camera Controls"):
-                    rotate_deg = gr.Slider(label="Rotate Left–Right (degrees °)", minimum=-90, maximum=90, step=45, value=0)
+                    rotate_deg = gr.Slider(label="Rotate Right-Left (degrees °)", minimum=-90, maximum=90, step=45, value=0)
                     move_forward = gr.Slider(label="Move Forward → Close-Up", minimum=0, maximum=10, step=5, value=0)
                     vertical_tilt = gr.Slider(label="Vertical Angle (Bird ↔ Worm)", minimum=-1, maximum=1, step=1, value=0)
                     wideangle = gr.Checkbox(label="Wide-Angle Lens", value=False)
