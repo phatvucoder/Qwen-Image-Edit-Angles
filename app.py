@@ -152,9 +152,9 @@ def infer_camera_edit(
 
 def create_video_between_images(input_image: str, output_image: str, prompt: str) -> str:
     """Create a video between the input and output images."""
-    if not input_image or not output_image:
+    if input_image is None or output_image is None:
         raise gr.Error("Both input and output images are required to create a video.")
-    
+        
     try:
         # Save images to temporary files if they're not already file paths
         if isinstance(input_image, Image.Image):
