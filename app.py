@@ -56,14 +56,14 @@ optimize_pipeline_(pipe, image=[Image.new("RGB", (1024, 1024)), Image.new("RGB",
 
 MAX_SEED = np.iinfo(np.int32).max
 
-def _generate_video_segment(input_image_path: str, output_image_path: str, prompt: str) -> str:
+def _generate_video_segment(input_image_path: str, output_image_path: str, prompt: str, request: gr.Request) -> str:
     """Generates a single video segment using the external service."""
-    video_client = Client("multimodalart/wan-2-2-first-last-frame", hf_token=os.getenv("TEMP_TOKEN"))
+    x_ip_token = request.headers['x-ip-token']
+    video_client = Client("multimodalart/wan-2-2-first-last-frame", headers={"x-ip-token": x_ip_token})
     result = video_client.predict(
         start_image_pil=handle_file(input_image_path),
         end_image_pil=handle_file(output_image_path),
         prompt=prompt, api_name="/generate_video",
-        
     )
     return result[0]["video"]
 
