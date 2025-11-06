@@ -343,7 +343,7 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
     for control in [rotate_deg, move_forward, vertical_tilt]:
         control.release(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs + [create_video_button])
     
-    wideangle.change(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs + [create_video_button])
+    wideangle.input(fn=maybe_infer, inputs=control_inputs_with_flag, outputs=outputs + [create_video_button])
     
     run_event.then(lambda img, *_: img, inputs=[result], outputs=[prev_output])
 
