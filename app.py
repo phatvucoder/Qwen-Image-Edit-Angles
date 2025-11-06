@@ -156,39 +156,16 @@ def create_video_between_images(input_image, output_image, prompt: str, request:
         raise gr.Error("Both input and output images are required to create a video.")
     
     try:
-        # Convert input image to file path
-        if isinstance(input_image, np.ndarray):
-            # Convert numpy array to PIL Image
-            input_pil = Image.fromarray(input_image.astype('uint8'))
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                input_pil.save(tmp.name)
-                input_image_path = tmp.name
-        elif isinstance(input_image, Image.Image):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                input_image.save(tmp.name)
-                input_image_path = tmp.name
-        elif isinstance(input_image, str):
-            input_image_path = input_image
-        else:
-            raise gr.Error(f"Unsupported input image type: {type(input_image)}")
         
-        # Convert output image to file path
-        if isinstance(output_image, np.ndarray):
-            # Convert numpy array to PIL Image
-            output_pil = Image.fromarray(output_image.astype('uint8'))
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                output_pil.save(tmp.name)
-                output_image_path = tmp.name
-        elif isinstance(output_image, Image.Image):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                output_image.save(tmp.name)
-                output_image_path = tmp.name
-        elif isinstance(output_image, str):
-            output_image_path = output_image
-        else:
-            raise gr.Error(f"Unsupported output image type: {type(output_image)}")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            input_image.save(tmp.name)
+            input_image_path = tmp.name
         
-        # Generate the video
+        output_pil = Image.fromarray(output_image.astype('uint8'))
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            output_pil.save(tmp.name)
+            output_image_path = tmp.name
+            
         video_path = _generate_video_segment(
             input_image_path, 
             output_image_path, 
@@ -264,9 +241,6 @@ with gr.Blocks(theme=gr.themes.Citrus(), css=css) as demo:
                     num_inference_steps = gr.Slider(label="Inference Steps", minimum=1, maximum=40, step=1, value=4)
                     height = gr.Slider(label="Height", minimum=256, maximum=2048, step=8, value=1024)
                     width = gr.Slider(label="Width", minimum=256, maximum=2048, step=8, value=1024)
-
-                
-                    
 
             with gr.Column():
                 result = gr.Image(label="Output Image", interactive=False)
