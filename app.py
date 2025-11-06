@@ -15,7 +15,6 @@ import math
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 
-import os
 from PIL import Image
 import os
 import gradio as gr
@@ -59,11 +58,12 @@ MAX_SEED = np.iinfo(np.int32).max
 
 def _generate_video_segment(input_image_path: str, output_image_path: str, prompt: str) -> str:
     """Generates a single video segment using the external service."""
-    video_client = Client("multimodalart/wan-2-2-first-last-frame")
+    video_client = Client("multimodalart/wan-2-2-first-last-frame", hf_token=os.getenv("TEMP_TOKEN"))
     result = video_client.predict(
         start_image_pil=handle_file(input_image_path),
         end_image_pil=handle_file(output_image_path),
-        prompt=prompt, api_name="/generate_video"
+        prompt=prompt, api_name="/generate_video",
+        
     )
     return result[0]["video"]
 
