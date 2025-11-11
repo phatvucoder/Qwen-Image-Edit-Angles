@@ -1,7 +1,10 @@
 git+https://github.com/huggingface/diffusers.git
-
-
-
+gradio
+gradio-client
+torch
+numpy
+pillow
+requests
 transformers
 accelerate
 safetensors
@@ -11,3 +14,4 @@ kernels
 torchvision
 peft
 torchao==0.11.0
+spaces

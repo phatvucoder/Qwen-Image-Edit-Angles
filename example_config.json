@@ -1,0 +1,55 @@
+{
+  "input_path": "monkey.jpg",
+  "input_url": "",
+  "output_dir": "output_example",
+  "camera_configs": [
+    {
+      "rotate_deg": -90,
+      "move_forward": 0,
+      "vertical_tilt": 0,
+      "wideangle": false,
+      "seed": 42,
+      "randomize_seed": false,
+      "true_guidance_scale": 1.0,
+      "num_inference_steps": 4,
+      "height": 1024,
+      "width": 1024
+    },
+    {
+      "rotate_deg": 0,
+      "move_forward": 5,
+      "vertical_tilt": 0,
+      "wideangle": false,
+      "seed": 123,
+      "randomize_seed": false,
+      "true_guidance_scale": 1.0,
+      "num_inference_steps": 4,
+      "height": 1024,
+      "width": 1024
+    },
+    {
+      "rotate_deg": 45,
+      "move_forward": 3,
+      "vertical_tilt": 1,
+      "wideangle": true,
+      "seed": -1,
+      "randomize_seed": true,
+      "true_guidance_scale": 1.2,
+      "num_inference_steps": 6,
+      "height": 1024,
+      "width": 1024
+    },
+    {
+      "rotate_deg": 0,
+      "move_forward": 0,
+      "vertical_tilt": -1,
+      "wideangle": false,
+      "seed": -1,
+      "randomize_seed": true,
+      "true_guidance_scale": 1.0,
+      "num_inference_steps": 4,
+      "height": 1024,
+      "width": 1024
+    }
+  ]
+}
