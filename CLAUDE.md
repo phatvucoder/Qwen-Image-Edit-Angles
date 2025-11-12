@@ -4,14 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Qwen Image Edit Camera Control** application that provides AI-powered camera angle manipulation and video generation capabilities. The project uses:
+This is a **Qwen Image Edit Camera Control** application that provides AI-powered camera angle manipulation and batch processing capabilities. This project is a fork and extension of [Qwen Image Edit Angles](https://huggingface.co/spaces/linoyts/Qwen-Image-Edit-Angles) by [linoyts](https://huggingface.co/linoyts).
 
+The project uses:
 - **Core Model**: Qwen-Image-Edit-2509 for image editing with camera controls
 - **LoRA**: dx8152/Qwen-Edit-2509-Multiple-angles for camera angle transformations
 - **Optimized Transformer**: Phr00t/Qwen-Image-Edit-Rapid-AIO for fast 4-step inference
 - **UI**: Gradio web interface with real-time camera controls
 - **CLI**: Command-line interface for batch processing
-- **Video Generation**: External service integration for video creation between images
+
+## Installation & Setup
+
+### Environment Setup
+```bash
+# Clone repository
+git clone https://github.com/your-username/Qwen-Image-Edit-Angles.git
+cd Qwen-Image-Edit-Angles
+
+# Create virtual environment
+conda create -n qwen-camera python=3.10
+conda activate qwen-camera
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Verify installation
+python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
+```
+
+### System Requirements
+- **Python**: 3.9+
+- **GPU**: CUDA-capable GPU recommended
+- **VRAM**: 8GB+ recommended for 1024x1024 images
+- **Disk**: 40GB+ available for model downloads
 
 ## Architecture
 
@@ -50,12 +75,20 @@ pip install -r requirements.txt
 python app.py
 ```
 
-#### Command-Line Interface (CLI)
+#### Running the Application
+
+##### Web Interface (Gradio)
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Run the Gradio app
+python app.py
+```
 
+Then open `http://localhost:7860` in your browser.
+
+##### Command-Line Interface (CLI)
+
+```bash
 # Basic usage with default angles
 python cli_camera.py --input image.jpg
 
@@ -71,8 +104,8 @@ python cli_camera.py --config example_config.json
 # Custom parameters
 python cli_camera.py --input image.jpg --rotate 45 --move 3 --wide --steps 8 --guidance 1.5
 
-# Verbose output
-python cli_camera.py --input image.jpg --preset default --verbose
+# Generate all preset angles
+python cli_camera.py --input image.jpg --preset all
 ```
 
 ### Testing Camera Controls
@@ -123,6 +156,26 @@ When updating models or LoRAs:
 2. Adjust LoRA configuration and weights ([`app.py:44-47`](app.py#L44-L47))
 3. Re-run optimization with new pipeline configuration
 
+## Common Use Cases
+
+### 1. Product Photography
+Generate multiple product shots from a single image:
+```bash
+python cli_camera.py --input product.jpg --rotate -45 -30 0 30 45 --move 3 6 --wide
+```
+
+### 2. Architectural Visualization
+Create different architectural perspectives:
+```bash
+python cli_camera.py --input building.jpg --rotate -90 -45 0 45 90 --tilt -1 0 1
+```
+
+### 3. Portrait Photography
+Generate various portrait angles:
+```bash
+python cli_camera.py --input portrait.jpg --rotate -15 0 15 --move 0 5 8
+```
+
 ## Development Environment
 
 ### Dependencies
@@ -136,12 +189,19 @@ When updating models or LoRAs:
 ### Hardware Requirements
 - CUDA-capable GPU (application defaults to CUDA, falls back to CPU)
 - Recommended VRAM: 8GB+ for optimal performance with 1024x1024 images
+- Disk Space: 40GB+ for model downloads
 
 ### Configuration Notes
 - Uses `torch.bfloat16` dtype for memory efficiency
 - 4-step inference by default (configurable via UI)
 - Dynamic shape compilation for variable image sizes
 - External video generation via Hugging Face Spaces API
+
+## Project Attribution
+
+**Original Project**: [Qwen Image Edit Angles](https://huggingface.co/spaces/linoyts/Qwen-Image-Edit-Angles) by [linoyts](https://huggingface.co/linoyts)
+
+**This Project**: Fork and CLI extension with batch processing capabilities
 
 ## File Structure
 

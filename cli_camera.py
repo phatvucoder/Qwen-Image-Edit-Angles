@@ -61,6 +61,8 @@ Examples:
     # Generation parameters
     parser.add_argument("--seed", type=int, default=0,
                        help="Random seed (default: 0, use -1 for random)")
+    parser.add_argument("--randomize-seed", action="store_true", default=True,
+                       help="Randomize seed (default: True, like GUI)")
     parser.add_argument("--steps", type=int, default=4,
                        help="Number of inference steps (default: 4)")
     parser.add_argument("--guidance", type=float, default=1.0,
@@ -122,8 +124,8 @@ def create_camera_configs_from_args(args) -> List[CameraConfig]:
                             move_forward=move,
                             vertical_tilt=tilt,
                             wideangle=wide,
-                            seed=args.seed if args.seed != -1 else 0,
-                            randomize_seed=args.seed == -1,
+                            seed=args.seed,
+                            randomize_seed=args.randomize_seed,  # Use new parameter
                             true_guidance_scale=args.guidance,
                             num_inference_steps=args.steps,
                             height=args.height,
@@ -134,8 +136,8 @@ def create_camera_configs_from_args(args) -> List[CameraConfig]:
         # If no specific parameters provided, add at least one config
         if not configs:
             configs.append(CameraConfig(
-                seed=args.seed if args.seed != -1 else 0,
-                randomize_seed=args.seed == -1,
+                seed=args.seed,
+                randomize_seed=args.randomize_seed,  # Use new parameter
                 true_guidance_scale=args.guidance,
                 num_inference_steps=args.steps,
                 height=args.height,
@@ -144,8 +146,8 @@ def create_camera_configs_from_args(args) -> List[CameraConfig]:
     else:
         # Update base configs with generation parameters
         for config in base_configs:
-            config.seed = args.seed if args.seed != -1 else 0
-            config.randomize_seed = args.seed == -1
+            config.seed = args.seed
+            config.randomize_seed = args.randomize_seed  # Use new parameter
             config.true_guidance_scale = args.guidance
             config.num_inference_steps = args.steps
             config.height = args.height
@@ -241,9 +243,9 @@ def main():
         print("\nInitializing camera pipeline...")
         pipeline = CameraPipeline(device=args.device)
 
-        # Process batch
+        # Process batch with verbose parameter
         print(f"\nProcessing {len(batch_config.camera_configs)} configurations...")
-        results = pipeline.process_batch(batch_config)
+        results = pipeline.process_batch(batch_config, verbose=args.verbose)
 
         print(f"\n✅ Processing complete! Generated {len(results)} images.")
         print(f"📁 Output directory: {Path(batch_config.output_dir).absolute()}")

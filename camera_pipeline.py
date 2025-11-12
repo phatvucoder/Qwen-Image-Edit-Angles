@@ -16,12 +16,19 @@ from pathlib import Path
 import requests
 from urllib.parse import urlparse
 import json
+import tempfile
 
 from diffusers import FlowMatchEulerDiscreteScheduler
 from optimization import optimize_pipeline_
 from qwenimage.pipeline_qwenimage_edit_plus import QwenImageEditPlusPipeline
 from qwenimage.transformer_qwenimage import QwenImageTransformer2DModel
 from qwenimage.qwen_fa3_processor import QwenDoubleStreamAttnProcessorFA3
+try:
+    from gradio_client import Client, handle_file
+    GRADIO_CLIENT_AVAILABLE = True
+except ImportError:
+    GRADIO_CLIENT_AVAILABLE = False
+    print("Warning: gradio_client not available. Video generation will be disabled.")
 
 MAX_SEED = np.iinfo(np.int32).max
 
@@ -79,14 +86,14 @@ class CameraPipeline:
         """Load and configure the Qwen Image Edit pipeline"""
         print(f"Loading pipeline on device: {self.device}")
 
-        # Load base pipeline
+        # Load base pipeline - EXACT match to GUI app.py
         self.pipe = QwenImageEditPlusPipeline.from_pretrained(
             "Qwen/Qwen-Image-Edit-2509",
             transformer=QwenImageTransformer2DModel.from_pretrained(
                 "linoyts/Qwen-Image-Edit-Rapid-AIO",
                 subfolder='transformer',
                 torch_dtype=self.dtype,
-                device_map='cuda' if self.device == 'cuda' else None
+                device_map='cuda'  # EXACT match to GUI - no None fallback
             ),
             torch_dtype=self.dtype
         ).to(self.device)
@@ -174,7 +181,7 @@ class CameraPipeline:
 
     def process_single_image(self, image: Image.Image, config: CameraConfig) -> tuple[Image.Image, int, str]:
         """
-        Process a single image with camera configuration
+        Process a single image with camera configuration - EXACT match to GUI infer_camera_edit logic
 
         Args:
             image: Input PIL Image
@@ -189,6 +196,7 @@ class CameraPipeline:
         if prompt == "no camera movement":
             return image, config.seed, prompt
 
+        # Handle randomize seed - EXACT match to GUI logic
         if config.randomize_seed:
             seed = random.randint(0, MAX_SEED)
         else:
@@ -196,12 +204,23 @@ class CameraPipeline:
 
         generator = torch.Generator(device=self.device).manual_seed(seed)
 
-        # Process image
+        # Prepare images list - EXACT match to GUI logic
+        pil_images = []
+        if image is not None:
+            if isinstance(image, Image.Image):
+                pil_images.append(image.convert("RGB"))
+            elif hasattr(image, "name"):
+                pil_images.append(Image.open(image.name).convert("RGB"))
+
+        if len(pil_images) == 0:
+            raise ValueError("No input image provided")
+
+        # Process image - EXACT match to GUI parameters
         result = self.pipe(
-            image=[image],
+            image=pil_images,  # GUI uses image=pil_images
             prompt=prompt,
-            height=config.height if config.height != 0 else None,
-            width=config.width if config.width != 0 else None,
+            height=config.height if config.height != 0 else None,  # GUI logic for 0 values
+            width=config.width if config.width != 0 else None,     # GUI logic for 0 values
             num_inference_steps=config.num_inference_steps,
             generator=generator,
             true_cfg_scale=config.true_guidance_scale,
@@ -210,12 +229,13 @@ class CameraPipeline:
 
         return result, seed, prompt
 
-    def process_batch(self, batch_config: BatchConfig) -> List[Dict[str, Any]]:
+    def process_batch(self, batch_config: BatchConfig, verbose: bool = False) -> List[Dict[str, Any]]:
         """
         Process batch of camera configurations
 
         Args:
             batch_config: Batch processing configuration
+            verbose: Enable verbose output
 
         Returns:
             List of results with metadata
@@ -238,7 +258,7 @@ class CameraPipeline:
         for i, config in enumerate(batch_config.camera_configs):
             print(f"\nProcessing configuration {i+1}/{len(batch_config.camera_configs)}")
 
-            # Update config dimensions based on input image if not specified
+            # Update config dimensions based on input image - EXACT match to GUI update_dimensions_on_upload
             if config.height == 1024 and config.width == 1024:
                 orig_width, orig_height = input_image.size
                 if orig_width > orig_height:
@@ -250,9 +270,15 @@ class CameraPipeline:
                     aspect_ratio = orig_width / orig_height
                     new_width = int(new_height * aspect_ratio)
 
-                # Ensure dimensions are multiples of 8
-                config.width = (new_width // 8) * 8
-                config.height = (new_height // 8) * 8
+                # Ensure dimensions are multiples of 8 - GUI logic
+                new_width = (new_width // 8) * 8
+                new_height = (new_height // 8) * 8
+
+                config.width = new_width
+                config.height = new_height
+
+                if verbose:
+                    print(f"Auto-adjusted dimensions to {config.width}x{config.height} based on input image")
 
             # Process image
             output_image, seed_used, prompt_used = self.process_single_image(input_image, config)
@@ -323,6 +349,63 @@ class CameraPipeline:
         print(f"Processing complete! Generated {len(results)} images in {output_dir}")
 
         return results
+
+    def generate_video_segment(self, input_image: Image.Image, output_image: Image.Image, prompt: str, request_headers: Optional[Dict] = None) -> Optional[str]:
+        """
+        Generate a video segment between input and output images - EXACT match to GUI _generate_video_segment
+
+        Args:
+            input_image: Input PIL Image
+            output_image: Output PIL Image
+            prompt: Text prompt for video generation
+            request_headers: HTTP headers (like x-ip-token from Gradio request)
+
+        Returns:
+            Video URL or path if successful, None otherwise
+        """
+        if not GRADIO_CLIENT_AVAILABLE:
+            print("Video generation not available - gradio_client not installed")
+            return None
+
+        try:
+            # Save images to temp files - EXACT match to GUI logic
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                input_image.save(tmp.name)
+                input_image_path = tmp.name
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                output_image.save(tmp.name)
+                output_image_path = tmp.name
+
+            # Use default headers if none provided
+            if not request_headers:
+                request_headers = {}
+
+            # Create video client - EXACT match to GUI
+            video_client = Client("multimodalart/wan-2-2-first-last-frame", headers=request_headers)
+
+            # Generate video - EXACT match to GUI
+            result = video_client.predict(
+                start_image_pil=handle_file(input_image_path),
+                end_image_pil=handle_file(output_image_path),
+                prompt=prompt if prompt else "Camera movement transformation",
+                api_name="/generate_video",
+            )
+
+            video_path = result[0]["video"]
+            print(f"Video generated successfully: {video_path}")
+            return video_path
+
+        except Exception as e:
+            print(f"Video generation failed: {e}")
+            return None
+        finally:
+            # Cleanup temp files
+            try:
+                os.unlink(input_image_path)
+                os.unlink(output_image_path)
+            except:
+                pass
 
 
 def create_default_camera_configs() -> List[CameraConfig]:
