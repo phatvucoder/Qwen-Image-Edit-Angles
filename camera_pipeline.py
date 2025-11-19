@@ -9,6 +9,7 @@ import os
 import random
 import torch
 import numpy as np
+import cv2
 from PIL import Image
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
@@ -217,28 +218,56 @@ class CameraPipeline:
         final_prompt = " ".join(prompt_parts).strip()
         return final_prompt if final_prompt else "no camera movement"
 
-    @staticmethod
-    def load_image(input_path: str, input_url: str = "") -> Image.Image:
+    def load_image(self, input_path: str, input_url: str = "", target_width: int = 1024, target_height: int = 1024) -> Image.Image:
         """
-        Load image from file path or URL
+        Load image from file path or URL and resize to target dimensions using OpenCV
 
         Args:
             input_path: Local file path
             input_url: URL to download image from
+            target_width: Target width for resizing
+            target_height: Target height for resizing
 
         Returns:
-            PIL Image object
+            PIL Image object resized to target dimensions
         """
         if input_url:
             print(f"Downloading image from URL: {input_url}")
             response = requests.get(input_url, stream=True)
             response.raise_for_status()
-            return Image.open(response.raw).convert("RGB")
+            image = Image.open(response.raw).convert("RGB")
         elif input_path:
             print(f"Loading image from path: {input_path}")
-            return Image.open(input_path).convert("RGB")
+            image = Image.open(input_path).convert("RGB")
         else:
             raise ValueError("Either input_path or input_url must be provided")
+
+        # Get original dimensions
+        original_width, original_height = image.size
+        print(f"Original image size: {original_width}x{original_height}")
+
+        # Check if resizing is needed
+        if original_width != target_width or original_height != target_height:
+            print(f"Resizing image to {target_width}x{target_height} using OpenCV (high quality)")
+
+            # Convert PIL to numpy array (RGB)
+            img_array = np.array(image)
+
+            # Use OpenCV for high-quality resizing with INTER_LANCZOS4 (best quality)
+            # INTER_LANCZOS4 is equivalent to PIL's LANCZOS but often faster and better quality
+            resized_array = cv2.resize(
+                img_array,
+                (target_width, target_height),
+                interpolation=cv2.INTER_LANCZOS4
+            )
+
+            # Convert back to PIL Image
+            image = Image.fromarray(resized_array)
+            print(f"Resized image size: {image.size[0]}x{image.size[1]}")
+        else:
+            print(f"Image already at target size {target_width}x{target_height}")
+
+        return image
 
     def process_single_image(self, image: Image.Image, config: CameraConfig) -> tuple[Image.Image, int, str]:
         """
@@ -301,8 +330,12 @@ class CameraPipeline:
         Returns:
             List of results with metadata
         """
-        # Load input image
-        input_image = self.load_image(batch_config.input_path, batch_config.input_url)
+        # Get target dimensions from first config (all configs should have same dimensions)
+        target_width = batch_config.camera_configs[0].width
+        target_height = batch_config.camera_configs[0].height
+
+        # Load and resize input image to target dimensions
+        input_image = self.load_image(batch_config.input_path, batch_config.input_url, target_width, target_height)
 
         # Create output directory
         output_dir = Path(batch_config.output_dir)
