@@ -87,8 +87,10 @@ class CameraPipelineFactory:
 
     @classmethod
     def _create_pipeline(cls, device: str) -> 'CameraPipeline':
-        """Create a new pipeline instance"""
-        return CameraPipeline(device=device, _factory_created=True)
+        """Create a new pipeline instance and load the model"""
+        pipeline = CameraPipeline(device=device, _factory_created=True)
+        pipeline._load_pipeline()  # Force load the model
+        return pipeline
 
     @classmethod
     def reset_cache(cls):
