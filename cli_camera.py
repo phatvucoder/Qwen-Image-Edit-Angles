@@ -11,7 +11,19 @@ import sys
 from pathlib import Path
 from typing import List
 
-from camera_pipeline import CameraPipeline, CameraConfig, BatchConfig, create_default_camera_configs
+from camera_pipeline import CameraPipeline, CameraPipelineFactory, CameraConfig, BatchConfig, create_default_camera_configs
+
+
+def validate_resolution(height: int, width: int) -> tuple[int, int]:
+    """Validate and adjust resolution to minimum usable values"""
+    min_resolution = 256
+
+    if height < min_resolution or width < min_resolution:
+        print(f"⚠️  Warning: Resolution {width}x{height} is too small for meaningful results")
+        print(f"   Auto-adjusting to minimum recommended resolution {min_resolution}x{min_resolution}")
+        return min_resolution, min_resolution
+
+    return height, width
 
 
 def parse_args():
@@ -35,6 +47,11 @@ Examples:
 
   # Use config file
   python cli_camera.py --config my_config.json
+
+Resolution Notes:
+  - Minimum recommended resolution: 256x256
+  - Default resolution: 1024x1024 (best quality)
+  - Smaller resolutions may produce poor quality results
         """
     )
 
@@ -43,6 +60,8 @@ Examples:
     input_group.add_argument("--input", "-i", type=str, help="Input image path")
     input_group.add_argument("--url", "-u", type=str, help="Input image URL")
     input_group.add_argument("--config", "-c", type=str, help="Configuration JSON file")
+    input_group.add_argument("--batch", nargs="+", help="Multiple image paths for batch processing")
+    input_group.add_argument("--image-dir", type=str, help="Directory containing images for batch processing")
 
     # Output options
     parser.add_argument("--output", "-o", type=str, default="output",
@@ -68,9 +87,9 @@ Examples:
     parser.add_argument("--guidance", type=float, default=1.0,
                        help="True guidance scale (default: 1.0)")
     parser.add_argument("--height", type=int, default=1024,
-                       help="Image height (default: 1024)")
+                       help="Image height (default: 1024, minimum: 256)")
     parser.add_argument("--width", type=int, default=1024,
-                       help="Image width (default: 1024)")
+                       help="Image width (default: 1024, minimum: 256)")
 
     # Device options
     parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto",
@@ -203,12 +222,138 @@ def save_config_file(batch_config: BatchConfig, output_path: str):
         json.dump(data, f, indent=2)
 
 
+def process_multi_images(image_paths: List[str], camera_configs: List[CameraConfig],
+                         output_dir: str, device: str, verbose: bool = False):
+    """Process multiple images efficiently using factory pattern"""
+
+    print(f"🔄 Loading shared model pipeline for {len(image_paths)} images...")
+    start_time = time.time()
+
+    # Use factory to get shared pipeline
+    pipeline = CameraPipelineFactory.get_pipeline(device=device)
+
+    load_time = time.time() - start_time
+    print(f"✅ Pipeline loaded in {load_time:.1f} seconds")
+    print(f"   Processing {len(image_paths)} images with {len(camera_configs)} configurations each")
+
+    successful = 0
+    failed = 0
+    total_start = time.time()
+
+    for i, input_path in enumerate(image_paths, 1):
+        if not os.path.exists(input_path):
+            print(f"⚠️  Skipping missing file: {input_path}")
+            failed += 1
+            continue
+
+        print(f"\n📸 [{i}/{len(image_paths)}] Processing: {input_path}")
+
+        # Create individual image output directory
+        path_parts = Path(input_path).parts
+        img_id = f"{path_parts[-2]}_{Path(input_path).stem.split('_')[-1]}"
+        image_output_dir = Path(output_dir) / img_id
+
+        try:
+            # Create batch config for this image
+            batch_config = BatchConfig(
+                input_path=input_path,
+                output_dir=str(image_output_dir),
+                camera_configs=camera_configs
+            )
+
+            # Process this image
+            results = pipeline.process_batch(batch_config, verbose=verbose)
+
+            successful += 1
+            if verbose:
+                print(f"   ✅ Generated {len(results)} images in {image_output_dir}")
+            else:
+                print(f"   ✅ Generated {len(results)} images")
+
+        except Exception as e:
+            print(f"   ❌ Failed: {e}")
+            failed += 1
+
+    total_time = time.time() - total_start
+
+    print(f"\n📊 Multi-Image Processing Summary:")
+    print(f"   Total time: {total_time:.1f} seconds")
+    print(f"   Successful: {successful}/{len(image_paths)} images")
+    print(f"   Failed: {failed} images")
+    print(f"   Average time per image: {total_time / max(len(image_paths), 1):.1f} seconds")
+    print(f"   Total variations generated: {successful * len(camera_configs)}")
+
+
+def get_images_from_directory(directory: str) -> List[str]:
+    """Get all image files from a directory"""
+    image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'}
+    image_paths = []
+
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        print(f"❌ Directory not found: {directory}")
+        return []
+
+    for ext in image_extensions:
+        image_paths.extend(dir_path.glob(f"*{ext}"))
+        image_paths.extend(dir_path.glob(f"*{ext.upper()}"))
+
+    return [str(p) for p in sorted(image_paths)]
+
+
+# Add time import for the new functions
+import time
+
+
 def main():
     """Main CLI function"""
     args = parse_args()
 
+    # Validate resolution
+    args.height, args.width = validate_resolution(args.height, args.width)
+
     try:
-        if args.config:
+        # Handle batch processing options
+        if args.batch or args.image_dir:
+            # Multi-image batch processing
+            if args.batch:
+                image_paths = args.batch
+                print(f"Processing {len(image_paths)} specified images...")
+            else:
+                image_paths = get_images_from_directory(args.image_dir)
+                print(f"Found {len(image_paths)} images in directory: {args.image_dir}")
+
+            if not image_paths:
+                print("❌ No images to process")
+                sys.exit(1)
+
+            # Create camera configurations
+            camera_configs = create_camera_configs_from_args(args)
+
+            if not camera_configs:
+                camera_configs = [CameraConfig(
+                    seed=args.seed,
+                    randomize_seed=args.randomize_seed,
+                    true_guidance_scale=args.guidance,
+                    num_inference_steps=args.steps,
+                    height=args.height,
+                    width=args.width
+                )]
+
+            # Validate resolution for all configs
+            for config in camera_configs:
+                config.height, config.width = validate_resolution(config.height, config.width)
+
+            # Process all images efficiently
+            process_multi_images(
+                image_paths=image_paths,
+                camera_configs=camera_configs,
+                output_dir=args.output,
+                device=args.device,
+                verbose=args.verbose
+            )
+
+        elif args.config:
             # Load from config file
             print(f"Loading configuration from: {args.config}")
             batch_config = load_config_file(args.config)
@@ -217,8 +362,33 @@ def main():
             if args.output != "output":
                 batch_config.output_dir = args.output
 
+            # Validate resolution for config file too
+            for config in batch_config.camera_configs:
+                config.height, config.width = validate_resolution(config.height, config.width)
+
+            if args.verbose:
+                print(f"Batch configuration:")
+                print(f"  Input: {batch_config.input_path or batch_config.input_url}")
+                print(f"  Output: {batch_config.output_dir}")
+                print(f"  Number of configurations: {len(batch_config.camera_configs)}")
+                for i, config in enumerate(batch_config.camera_configs):
+                    print(f"  Config {i+1}: rotate={config.rotate_deg}°, "
+                          f"move={config.move_forward}, tilt={config.vertical_tilt}, "
+                          f"wide={config.wideangle}")
+
+            # Use factory for efficient single image processing
+            print("\nInitializing camera pipeline...")
+            pipeline = CameraPipelineFactory.get_pipeline(device=args.device)
+
+            # Process batch
+            print(f"\nProcessing {len(batch_config.camera_configs)} configurations...")
+            results = pipeline.process_batch(batch_config, verbose=args.verbose)
+
+            print(f"\n✅ Processing complete! Generated {len(results)} images.")
+            print(f"📁 Output directory: {Path(batch_config.output_dir).absolute()}")
+
         else:
-            # Create configuration from command line arguments
+            # Single image processing (original behavior)
             camera_configs = create_camera_configs_from_args(args)
 
             batch_config = BatchConfig(
@@ -228,27 +398,26 @@ def main():
                 camera_configs=camera_configs
             )
 
-        if args.verbose:
-            print(f"Batch configuration:")
-            print(f"  Input: {batch_config.input_path or batch_config.input_url}")
-            print(f"  Output: {batch_config.output_dir}")
-            print(f"  Number of configurations: {len(batch_config.camera_configs)}")
             if args.verbose:
+                print(f"Batch configuration:")
+                print(f"  Input: {batch_config.input_path or batch_config.input_url}")
+                print(f"  Output: {batch_config.output_dir}")
+                print(f"  Number of configurations: {len(batch_config.camera_configs)}")
                 for i, config in enumerate(batch_config.camera_configs):
                     print(f"  Config {i+1}: rotate={config.rotate_deg}°, "
                           f"move={config.move_forward}, tilt={config.vertical_tilt}, "
                           f"wide={config.wideangle}")
 
-        # Initialize pipeline
-        print("\nInitializing camera pipeline...")
-        pipeline = CameraPipeline(device=args.device)
+            # Use factory for efficiency
+            print("\nInitializing camera pipeline...")
+            pipeline = CameraPipelineFactory.get_pipeline(device=args.device)
 
-        # Process batch with verbose parameter
-        print(f"\nProcessing {len(batch_config.camera_configs)} configurations...")
-        results = pipeline.process_batch(batch_config, verbose=args.verbose)
+            # Process batch
+            print(f"\nProcessing {len(batch_config.camera_configs)} configurations...")
+            results = pipeline.process_batch(batch_config, verbose=args.verbose)
 
-        print(f"\n✅ Processing complete! Generated {len(results)} images.")
-        print(f"📁 Output directory: {Path(batch_config.output_dir).absolute()}")
+            print(f"\n✅ Processing complete! Generated {len(results)} images.")
+            print(f"📁 Output directory: {Path(batch_config.output_dir).absolute()}")
 
     except Exception as e:
         print(f"❌ Error: {e}", file=sys.stderr)

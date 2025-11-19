@@ -61,20 +61,74 @@ class BatchConfig:
             self.camera_configs = []
 
 
+class CameraPipelineFactory:
+    """Factory for creating and reusing CameraPipeline instances"""
+
+    _instance = None
+    _pipeline = None
+    _device = None
+    _dtype = torch.bfloat16
+
+    @classmethod
+    def get_pipeline(cls, device: str = "auto") -> 'CameraPipeline':
+        """
+        Get a shared pipeline instance, creating one if it doesn't exist
+
+        Args:
+            device: Device to use ('cuda', 'cpu', or 'auto')
+
+        Returns:
+            CameraPipeline: Shared pipeline instance
+        """
+        if cls._instance is None or cls._device != device:
+            cls._instance = cls._create_pipeline(device)
+            cls._device = device
+        return cls._instance
+
+    @classmethod
+    def _create_pipeline(cls, device: str) -> 'CameraPipeline':
+        """Create a new pipeline instance"""
+        return CameraPipeline(device=device, _factory_created=True)
+
+    @classmethod
+    def reset_cache(cls):
+        """Reset the cached pipeline - useful for device changes or memory cleanup"""
+        if cls._pipeline is not None:
+            # Clean up GPU memory
+            if hasattr(cls._pipeline, 'pipe') and cls._pipeline.pipe is not None:
+                del cls._pipeline.pipe
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        cls._instance = None
+        cls._pipeline = None
+        cls._device = None
+
+
 class CameraPipeline:
     """Main camera control pipeline class"""
 
-    def __init__(self, device: str = "auto"):
+    def __init__(self, device: str = "auto", _factory_created: bool = False):
         """
         Initialize the camera pipeline
 
         Args:
             device: Device to use ('cuda', 'cpu', or 'auto')
+            _factory_created: Internal flag for factory-created instances
         """
         self.device = self._get_device(device)
         self.dtype = torch.bfloat16
         self.pipe = None
-        self._load_pipeline()
+        self._factory_created = _factory_created
+
+        # Only load pipeline if not created by factory
+        if not _factory_created:
+            print("⚠️  Warning: Creating individual pipeline instance.")
+            print("   For better performance with multiple images, use:")
+            print("   from batch_process import BatchProcessor")
+            print("   # or")
+            print("   from camera_pipeline import CameraPipelineFactory")
+            self._load_pipeline()
 
     def _get_device(self, device: str) -> str:
         """Determine the appropriate device"""
@@ -85,6 +139,11 @@ class CameraPipeline:
     def _load_pipeline(self):
         """Load and configure the Qwen Image Edit pipeline"""
         print(f"Loading pipeline on device: {self.device}")
+
+        # Store in factory cache for reuse
+        CameraPipelineFactory._pipeline = self
+        CameraPipelineFactory._instance = self
+        CameraPipelineFactory._device = self.device
 
         # Load base pipeline - EXACT match to GUI app.py
         self.pipe = QwenImageEditPlusPipeline.from_pretrained(
